@@ -13,9 +13,9 @@ void main() {
 
   for (final cat in allCategories) {
     test('ApiService fetches $cat', () async {
-      final items = await ApiService.fetchPdfsByCategory(cat);
-      expect(items, isNotEmpty, reason: 'Should have items for $cat');
-      print('[$cat] Fetched ${items.length} items. First: ${items.first.title}');
+      final result = await ApiService.fetchPdfsByCategory(cat);
+      expect(result.items, isNotEmpty, reason: 'Should have items for $cat');
+      print('[$cat] Fetched ${result.items.length} items (page ${result.currentPage}/${result.totalPages}). First: ${result.items.first.title}');
     });
   }
 }

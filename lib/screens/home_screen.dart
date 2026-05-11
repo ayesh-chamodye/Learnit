@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' as f;
+import 'package:cached_network_image/cached_network_image.dart';
 import '../models/pdf_model.dart';
 import '../services/api_service.dart';
 import 'category_screen.dart';
+import 'pdf_viewer_screen.dart';
+import 'courses_screen.dart';
 
 class ModernHomeScreen extends StatefulWidget {
   const ModernHomeScreen({super.key});
@@ -41,12 +45,12 @@ class _ModernHomeScreenState extends State<ModernHomeScreen> {
       
       for (final category in _categories) {
         try {
-          debugPrint('Fetching: $category');
-          final pdfs = await ApiService.fetchPdfsByCategory(category);
-          debugPrint('Got ${pdfs.length} for $category');
-          results[category] = pdfs;
+          f.debugPrint('Fetching: $category');
+          final response = await ApiService.fetchPdfsByCategory(category);
+          f.debugPrint('Got ${response.items.length} for $category (page ${response.currentPage}/${response.totalPages})');
+          results[category] = response.items;
         } catch (e) {
-          debugPrint('ERROR $category: $e');
+          f.debugPrint('ERROR $category: $e');
           results[category] = [];
         }
       }
@@ -56,7 +60,7 @@ class _ModernHomeScreenState extends State<ModernHomeScreen> {
         _isLoading = false;
       });
     } catch (e) {
-      debugPrint('FATAL: $e');
+      f.debugPrint('FATAL: $e');
       setState(() {
         _error = e.toString();
         _isLoading = false;
@@ -69,28 +73,37 @@ class _ModernHomeScreenState extends State<ModernHomeScreen> {
     final theme = Theme.of(context);
     final primaryColor = theme.colorScheme.primary;
 
+    String getAppBarTitle() {
+      switch (_currentIndex) {
+        case 0: return 'LearnIt';
+        case 1: return 'Courses';
+        case 2: return 'Quizzes';
+        case 3: return 'Progress';
+        default: return 'LearnIt';
+      }
+    }
+
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        title: const Text(
-          'LearnIt',
-          style: TextStyle(
-            fontWeight: FontWeight.w900,
-            letterSpacing: 1.5,
-          ),
+        title: Text(
+          getAppBarTitle(),
+          style: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.5),
         ),
         backgroundColor: primaryColor,
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.search),
-            onPressed: () {},
-          ),
-          IconButton(
-            icon: const Icon(Icons.notifications_outlined),
-            onPressed: () {},
-          ),
+          if (_currentIndex == 0) ...[
+            IconButton(
+              icon: const Icon(Icons.search),
+              onPressed: () {},
+            ),
+            IconButton(
+              icon: const Icon(Icons.notifications_outlined),
+              onPressed: () {},
+            ),
+          ],
         ],
       ),
       body: _buildBody(),
@@ -254,40 +267,43 @@ class _ModernHomeScreenState extends State<ModernHomeScreen> {
               ],
             ),
           ),
-           ..._categories.map((category) {
-             final items = _categoryPdfs[category] ?? [];
-             final categoryName = _categoryLabels[category] ?? category;
-             final icon = _categoryIcons[category] ?? Icons.folder;
-             final color = _categoryColors[category] ?? Colors.grey;
+          ..._categories.map((category) {
+            final items = _categoryPdfs[category] ?? [];
+            final categoryName = _categoryLabels[category] ?? category;
+            final icon = _categoryIcons[category] ?? Icons.folder;
+            final color = _categoryColors[category] ?? Colors.grey;
 
-             return _CategorySection(
-               title: categoryName,
-               icon: icon,
-               color: color,
-               items: items,
-               onViewAll: () {
-                 Navigator.push(
-                   context,
-                   MaterialPageRoute(
-                     builder: (context) => CategoryScreen(
-                       category: category,
-                       title: categoryName,
-                       icon: icon,
-                       color: color,
-                     ),
-                   ),
-                 );
-               },
-               onCardTap: (pdf) {
-                 ScaffoldMessenger.of(context).showSnackBar(
-                   SnackBar(
-                     content: Text('Opening: ${pdf.title}'),
-                     backgroundColor: color,
-                   ),
-                 );
-               },
-             );
-           }),
+            return _CategorySection(
+              title: categoryName,
+              icon: icon,
+              color: color,
+              items: items,
+              onViewAll: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => CategoryScreen(
+                      category: category,
+                      title: categoryName,
+                      icon: icon,
+                      color: color,
+                    ),
+                  ),
+                );
+              },
+              onCardTap: (pdf) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => PdfViewerScreen(
+                      pdfUrl: pdf.pdfUrl ?? '',
+                      title: pdf.title,
+                    ),
+                  ),
+                );
+              },
+            );
+          }),
           const SizedBox(height: 80),
         ],
       ),
@@ -316,11 +332,14 @@ class _ModernHomeScreenState extends State<ModernHomeScreen> {
     'teacher-guides': Colors.purple,
     'term-test-papers': Colors.orange,
     'text-books': Colors.teal,
-  };
+   };
 
-  Widget _buildCoursesTab() => _buildEmptyTab(Icons.book, 'Courses', 'Your learning journey awaits');
-  Widget _buildQuizzesTab() => _buildEmptyTab(Icons.quiz, 'Quizzes', 'Test your knowledge');
-  Widget _buildProgressTab() => _buildEmptyTab(Icons.bar_chart, 'Progress', 'Track your learning milestones');
+   Widget _buildCoursesTab() {
+     return const CoursesTabContent();
+   }
+
+   Widget _buildQuizzesTab() => _buildEmptyTab(Icons.quiz, 'Quizzes', 'Test your knowledge');
+   Widget _buildProgressTab() => _buildEmptyTab(Icons.bar_chart, 'Progress', 'Track your learning milestones');
 
   Widget _buildEmptyTab(IconData icon, String title, String subtitle) {
     return Center(
@@ -492,21 +511,34 @@ class _PdfCard extends StatelessWidget {
                     topRight: Radius.circular(16),
                   ),
                 ),
-                child: pdf.thumbnailUrl != null
-                    ? ClipRRect(
-                        borderRadius: const BorderRadius.only(
-                          topLeft: Radius.circular(16),
-                          topRight: Radius.circular(16),
-                        ),
-                        child: Image.network(
-                          pdf.thumbnailUrl!,
-                          width: double.infinity,
-                          height: double.infinity,
-                          fit: BoxFit.cover,
-                          errorBuilder: (c, o, s) => _buildPdfIcon(context, color),
-                        ),
-                      )
-                    : _buildPdfIcon(context, color),
+                 child: pdf.thumbnailUrl != null
+                     ? ClipRRect(
+                         borderRadius: const BorderRadius.only(
+                           topLeft: Radius.circular(16),
+                           topRight: Radius.circular(16),
+                         ),
+                         child: CachedNetworkImage(
+                           imageUrl: pdf.thumbnailUrl!,
+                           width: double.infinity,
+                           height: double.infinity,
+                           fit: BoxFit.cover,
+                           placeholder: (context, url) => Container(
+                             color: color.withValues(alpha: 0.08),
+                             child: Center(
+                               child: SizedBox(
+                                 width: 24,
+                                 height: 24,
+                                 child: CircularProgressIndicator(
+                                   strokeWidth: 2,
+                                   valueColor: AlwaysStoppedAnimation<Color>(color),
+                                 ),
+                               ),
+                             ),
+                           ),
+                           errorWidget: (context, url, error) => _buildPdfIcon(context, color),
+                         ),
+                       )
+                     : _buildPdfIcon(context, color),
               ),
             ),
             Expanded(
