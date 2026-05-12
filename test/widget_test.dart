@@ -6,7 +6,7 @@ import 'package:learnit/screens/home_screen.dart';
 
 void main() {
   testWidgets('SplashScreen displays image and bouncing dots', (WidgetTester tester) async {
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(const MyApp(initialDarkMode: false));
     
     expect(find.byType(SplashScreen), findsOneWidget);
     expect(find.byType(Image), findsOneWidget);
@@ -25,7 +25,7 @@ void main() {
   });
 
   testWidgets('ModernHomeScreen shows all 5 category sections', (WidgetTester tester) async {
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(const MyApp(initialDarkMode: false));
     
     await tester.pump(const Duration(milliseconds: 5100));
     await tester.pumpAndSettle();
@@ -52,7 +52,7 @@ void main() {
   });
 
    testWidgets('App routes work correctly', (WidgetTester tester) async {
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(const MyApp(initialDarkMode: false));
     
     expect(find.byType(SplashScreen), findsOneWidget);
     expect(find.byType(Image), findsOneWidget);

@@ -1,0 +1,6 @@
+[warning] Unused import: 'dart:io' (F:\Learnit\learnit\lib\screens\settings_screen.dart:4:8)
+[info] Don't use 'BuildContext's across async gaps (F:\Learnit\learnit\lib\screens\settings_screen.dart:50:26)
+[info] Don't use 'BuildContext's across async gaps (F:\Learnit\learnit\lib\screens\settings_screen.dart:168:40)
+[warning] The value of the local variable 'statistics' isn't used (F:\Learnit\learnit\lib\services\youtube_api_service.dart:251:13)
+[warning] Unused import: 'package:learnit/models/pdf_model.dart' (F:\Learnit\learnit\test\api_test.dart:3:8)
+[info] Don't invoke 'print' in production code (F:\Learnit\learnit\test\api_test.dart:18:7)

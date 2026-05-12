@@ -86,9 +86,9 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // App Logo Image (no container, directly on background)
+            // App Logo Image
             Image.asset(
-              'assets/images/icon.png',
+              'assets/icon.png',
               width: 200,
               height: 200,
               errorBuilder: (context, error, stackTrace) {

@@ -4,8 +4,8 @@ import 'package:flutter_pdfview/flutter_pdfview.dart';
 import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:open_filex/open_filex.dart';
 import 'package:path/path.dart' as p;
+import 'package:shared_preferences/shared_preferences.dart';
 
 class PdfViewerScreen extends StatefulWidget {
   final String pdfUrl;
@@ -80,9 +80,34 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
       }
 
       final dio = Dio();
-      final dir = await _getDownloadDirectory();
+      String dirPath;
+
+      // Get download path from settings or use default
+      final prefs = await SharedPreferences.getInstance();
+      final savedPath = prefs.getString('download_path') ?? '';
+
+      if (savedPath.isNotEmpty) {
+        dirPath = savedPath;
+      } else {
+        // Use default downloads directory
+        if (Platform.isAndroid) {
+          final directory = await getExternalStorageDirectory();
+          dirPath = directory?.path ?? (await getApplicationDocumentsDirectory()).path;
+          // Try to use Downloads folder
+          final downloadsDir = Directory('/storage/emulated/0/Download');
+          if (await downloadsDir.exists()) {
+            dirPath = downloadsDir.path;
+          }
+        } else {
+          dirPath = (await getApplicationDocumentsDirectory()).path;
+        }
+      }
+
       final fileName = _sanitizeFileName(widget.title);
-      final filePath = p.join(dir.path, '$fileName.pdf');
+      final filePath = p.join(dirPath, '$fileName.pdf');
+
+      // Ensure directory exists
+      await Directory(dirPath).create(recursive: true);
 
       await dio.download(
         widget.pdfUrl,
@@ -112,42 +137,15 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
           _isDownloading = false;
           _isLoading = false;
         });
-      }
-    }
-  }
-
-  Future<Directory> _getDownloadDirectory() async {
-    if (Platform.isAndroid) {
-      return await getExternalStorageDirectory() ?? 
-             await getApplicationDocumentsDirectory();
-    } else {
-      return await getApplicationDocumentsDirectory();
-    }
-  }
+       }
+     }
+   }
 
   String _sanitizeFileName(String name) {
     final sanitized = name
         .replaceAll(r'[\\/*?:"<>|]', '_')
         .replaceAll(' ', '_');
     return sanitized.length > 50 ? sanitized.substring(0, 50) : sanitized;
-  }
-
-  void _openInExternalApp() async {
-    if (_localFile == null) return;
-    try {
-      final result = await OpenFilex.open(_localFile!);
-      if (mounted && result.type != ResultType.done) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Cannot open file: ${result.message}')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error opening file: $e')),
-        );
-      }
-    }
   }
 
   @override
@@ -163,25 +161,24 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
         backgroundColor: Colors.blue[900],
         foregroundColor: Colors.white,
         actions: [
-          if (_localFile != null)
-            IconButton(
-              icon: Icon(_isBookmarked ? Icons.bookmark : Icons.bookmark_border),
-              onPressed: () {
-                setState(() => _isBookmarked = !_isBookmarked);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(_isBookmarked ? 'Added to bookmarks' : 'Removed from bookmarks'),
-                    backgroundColor: Colors.green,
-                  ),
-                );
-              },
-            ),
           IconButton(
-            icon: const Icon(Icons.open_in_browser),
+            icon: Icon(_isBookmarked ? Icons.bookmark : Icons.bookmark_border),
             onPressed: () {
-              // Open in browser
+              setState(() => _isBookmarked = !_isBookmarked);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(_isBookmarked ? 'Added to bookmarks' : 'Removed from bookmarks'),
+                  backgroundColor: Colors.green,
+                ),
+              );
             },
           ),
+          IconButton(
+            icon: const Icon(Icons.download),
+            onPressed: _localFile != null ? null : _downloadPdf,
+            tooltip: 'Download PDF',
+          ),
+          
         ],
       ),
       body: _buildBody(),
@@ -311,9 +308,15 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                   ),
                 ),
               IconButton(
-                icon: const Icon(Icons.download),
-                onPressed: _localFile != null ? _openInExternalApp : null,
-                tooltip: 'Open in external reader',
+                icon: _isDownloading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.download),
+                onPressed: _isDownloading ? null : _downloadPdf,
+                tooltip: 'Download PDF',
               ),
             ],
           ),

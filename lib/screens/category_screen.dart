@@ -20,50 +20,33 @@ class CategoryScreen extends StatefulWidget {
 
   @override
   State<CategoryScreen> createState() => _CategoryScreenState();
-}
-
-class _CategoryScreenState extends State<CategoryScreen> {
-   List<PdfItem> _allItems = []; // All loaded items (unfiltered)
-   List<PdfItem> _filteredItems = []; // Items after search filter
-   bool _isLoadingFirst = true; // Initial page load
-   bool _isLoadingMore = false; // Loading subsequent pages
-   String? _error;
-   int _currentPage = 0; // Last loaded page number
-   int _totalPages = 1; // Total available pages
-   bool _isSearchLoadingChain = false; // Tracks if a search-triggered loading chain is active
-   final TextEditingController _searchController = TextEditingController();
-   final ScrollController _scrollController = ScrollController();
 
   // Static cache shared across all CategoryScreen instances
   static final Map<String, List<PdfItem>> _categoryCache = {};
   static final Map<String, int> _categoryCurrentPage = {};
   static final Map<String, int> _categoryTotalPages = {};
+}
+
+class _CategoryScreenState extends State<CategoryScreen> {
+  List<PdfItem> _allItems = []; // All loaded items (unfiltered)
+  List<PdfItem> _filteredItems = []; // Items after search filter
+  bool _isLoadingFirst = true; // First page loading
+  bool _isLoadingMore = false; // Additional pages loading
+  bool _isSearching = false; // Search-triggered full load in progress
+  String? _error;
+  int _currentPage = 0; // Last loaded page number
+  int _totalPages = 1; // Total available pages
+  bool _hasFetchedFirstPage = false; // Track if page 1 has been fetched
+  final TextEditingController _searchController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
-    _restoreFromCache();
     _searchController.addListener(_onSearchChanged);
     _scrollController.addListener(_onScroll);
-    // If not in cache or cache not fully loaded, load next pages as needed
-    if (_currentPage < _totalPages) {
-      _loadNextPage();
-    }
-  }
-
-  void _restoreFromCache() {
-    if (_categoryCache.containsKey(widget.category)) {
-      setState(() {
-        _allItems = List.from(_categoryCache[widget.category]!);
-        _currentPage = _categoryCurrentPage[widget.category] ?? 0;
-        _totalPages = _categoryTotalPages[widget.category] ?? 1;
-        _isLoadingFirst = false;
-        _applySearch();
-      });
-    } else {
-      // Start fresh
-      _isLoadingFirst = true;
-    }
+    // Load only first page initially
+    _loadFirstPage();
   }
 
   @override
@@ -76,20 +59,19 @@ class _CategoryScreenState extends State<CategoryScreen> {
   }
 
   void _onSearchChanged() {
-    _applySearch();
     final query = _searchController.text.trim();
-    // If search query is non-empty and there are more pages to load, and no load in progress, start loading chain
-    if (query.isNotEmpty && _currentPage < _totalPages && !_isLoadingFirst && !_isLoadingMore && !_isSearchLoadingChain) {
-      _isSearchLoadingChain = true;
-      _loadNextPage();
+    if (query.isNotEmpty) {
+      // User is searching - need to load all pages
+      _isSearching = true;
+      _loadAllPagesForSearch();
+    } else {
+      // Search cleared
+      _isSearching = false;
+      _applySearch();
     }
   }
 
   void _applySearch() {
-    // If search is cleared, reset the search loading chain flag
-    if (_searchController.text.trim().isEmpty) {
-      _isSearchLoadingChain = false;
-    }
     final query = _searchController.text.toLowerCase();
     setState(() {
       if (query.isEmpty) {
@@ -109,88 +91,150 @@ class _CategoryScreenState extends State<CategoryScreen> {
     // Load more when scrolled to within 200px of bottom
     if (position.pixels >= position.maxScrollExtent - 200 &&
         !_isLoadingMore &&
-        _currentPage < _totalPages) {
+        _currentPage < _totalPages &&
+        !_isSearching) {
       _loadNextPage();
     }
   }
 
+  /// Load only the first page (page 1)
+  Future<void> _loadFirstPage() async {
+    setState(() {
+      _isLoadingFirst = true;
+      _error = null;
+    });
+
+    try {
+      final result = await ApiService.fetchPdfsByCategory(widget.category, page: 1);
+
+      // Preload images for smooth scrolling
+      _preloadImages(result.items);
+
+      setState(() {
+        _allItems = List.from(result.items);
+        _currentPage = result.currentPage;
+        _totalPages = result.totalPages;
+        _isLoadingFirst = false;
+        _hasFetchedFirstPage = true;
+        _applySearch();
+        // Update cache
+        CategoryScreen._categoryCache[widget.category] = List.from(_allItems);
+        CategoryScreen._categoryCurrentPage[widget.category] = _currentPage;
+        CategoryScreen._categoryTotalPages[widget.category] = _totalPages;
+      });
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+        _isLoadingFirst = false;
+      });
+    }
+  }
+
+  /// Load next page (triggered by scroll)
   Future<void> _loadNextPage() async {
     final nextPage = _currentPage + 1;
+    if (nextPage > _totalPages) return;
+
     setState(() {
-      if (nextPage == 1) {
-        _isLoadingFirst = true;
-      } else {
-        _isLoadingMore = true;
-      }
+      _isLoadingMore = true;
       _error = null;
     });
 
     try {
       final result = await ApiService.fetchPdfsByCategory(widget.category, page: nextPage);
 
-      // Avoid duplicates: check existing IDs
+      // Avoid duplicates
       final existingIds = _allItems.map((e) => e.id).toSet();
       final newItems = result.items.where((item) => !existingIds.contains(item.id)).toList();
 
-      // Preload images for smooth scrolling
+      // Preload images
       _preloadImages(newItems);
 
       setState(() {
         _allItems.addAll(newItems);
         _currentPage = result.currentPage;
         _totalPages = result.totalPages;
-        _isLoadingFirst = false;
         _isLoadingMore = false;
         _applySearch();
         // Update cache
-        _categoryCache[widget.category] = List.from(_allItems);
-        _categoryCurrentPage[widget.category] = _currentPage;
-        _categoryTotalPages[widget.category] = _totalPages;
+        CategoryScreen._categoryCache[widget.category] = List.from(_allItems);
+        CategoryScreen._categoryCurrentPage[widget.category] = _currentPage;
+        CategoryScreen._categoryTotalPages[widget.category] = _totalPages;
       });
-      
-      // Auto-continue loading if search is active and more pages remain
-      if (mounted && _searchController.text.trim().isNotEmpty && _currentPage < _totalPages) {
-        if (!_isLoadingMore && !_isLoadingFirst) {
-          // Mark chain active if not already
-          if (!_isSearchLoadingChain) {
-            _isSearchLoadingChain = true;
-          }
-          await Future.delayed(const Duration(milliseconds: 100)); // Small delay to yield UI
-          _loadNextPage();
-          return; // Skip flag clearing; the recursive call will handle it
-        }
-      }
-      // Chain ends here (no more pages or search cleared)
-      if (_isSearchLoadingChain) {
-        _isSearchLoadingChain = false;
-      }
     } catch (e) {
       setState(() {
         _error = e.toString();
-        if (nextPage == 1) {
-          _isLoadingFirst = false;
-        } else {
-          _isLoadingMore = false;
-        }
+        _isLoadingMore = false;
       });
-      // Clear search loading chain flag on error
-      if (_isSearchLoadingChain) {
-        _isSearchLoadingChain = false;
+    }
+  }
+
+  /// Load all remaining pages sequentially (used when search is active)
+  Future<void> _loadAllPagesForSearch() async {
+    // Ensure first page is loaded to know totalPages
+    if (!_hasFetchedFirstPage) {
+      await _loadFirstPage();
+      // If error occurred, _loadFirstPage sets _error and returns
+      if (_error != null) {
+        _isSearching = false;
+        return;
       }
+    }
+
+    // Load pages one by one starting from current page + 1
+    int pageToLoad = _currentPage + 1;
+    while (pageToLoad <= _totalPages && mounted) {
+      setState(() {
+        _isLoadingMore = true;
+        _error = null;
+      });
+
+      try {
+        final result = await ApiService.fetchPdfsByCategory(widget.category, page: pageToLoad);
+
+        // Avoid duplicates
+        final existingIds = _allItems.map((e) => e.id).toSet();
+        final newItems = result.items.where((item) => !existingIds.contains(item.id)).toList();
+
+        // Preload images
+        _preloadImages(newItems);
+
+        setState(() {
+          _allItems.addAll(newItems);
+          _currentPage = result.currentPage;
+          _totalPages = result.totalPages;
+          _isLoadingMore = false;
+        });
+
+        pageToLoad++;
+      } catch (e) {
+        setState(() {
+          _error = e.toString();
+          _isLoadingMore = false;
+        });
+        break;
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        _isSearching = false;
+      });
+      _applySearch();
     }
   }
 
   Future<void> _refresh() async {
-    // Cancel any ongoing search loading chain
-    _isSearchLoadingChain = false;
-    _categoryCache.remove(widget.category);
-    _categoryCurrentPage.remove(widget.category);
-    _categoryTotalPages.remove(widget.category);
+    // Clear cache and reload first page
+    _hasFetchedFirstPage = false;
+    CategoryScreen._categoryCache.remove(widget.category);
+    CategoryScreen._categoryCurrentPage.remove(widget.category);
+    CategoryScreen._categoryTotalPages.remove(widget.category);
     _allItems.clear();
     _filteredItems.clear();
     _currentPage = 0;
     _totalPages = 1;
-    await _loadNextPage();
+    await _loadFirstPage();
   }
 
   @override
@@ -229,7 +273,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
               ),
             ),
           ),
-          if (_isLoadingMore && _searchController.text.isNotEmpty)
+          if (_isLoadingMore && !_isSearching)
             LinearProgressIndicator(
               minHeight: 2,
               backgroundColor: Colors.transparent,
@@ -244,6 +288,20 @@ class _CategoryScreenState extends State<CategoryScreen> {
   }
 
   Widget _buildBody() {
+    // Show searching overlay when loading all pages for search
+    if (_isSearching) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(widget.color)),
+            const SizedBox(height: 16),
+            Text('Searching all pages...', style: TextStyle(color: Colors.grey[600])),
+          ],
+        ),
+      );
+    }
+
     if (_isLoadingFirst) {
       return Center(
         child: Column(
@@ -306,26 +364,26 @@ class _CategoryScreenState extends State<CategoryScreen> {
       child: ListView.builder(
         controller: _scrollController,
         padding: const EdgeInsets.all(16),
-        itemCount: _filteredItems.length + (_isLoadingMore ? 1 : 0),
+        itemCount: _filteredItems.length + (_isLoadingMore && !_isSearching ? 1 : 0),
         itemBuilder: (context, index) {
-           if (index == _filteredItems.length) {
-             // Loading more indicator at bottom
-             return Padding(
-               padding: const EdgeInsets.symmetric(vertical: 16),
-               child: Center(
-                 child: Column(
-                   children: [
-                     CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(widget.color)),
-                     const SizedBox(height: 8),
-                     Text(
-                       _searchController.text.isNotEmpty ? 'Searching all results...' : 'Loading more...',
-                       style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                     ),
-                   ],
-                 ),
-               ),
-             );
-           }
+          if (index == _filteredItems.length) {
+            // Loading more indicator at bottom
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Center(
+                child: Column(
+                  children: [
+                    CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(widget.color)),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Loading more...',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
           final pdf = _filteredItems[index];
           return Container(
             margin: const EdgeInsets.only(bottom: 12),
@@ -458,11 +516,10 @@ class _CategoryPdfCard extends StatelessWidget {
   }
 }
 
-// Preload images helper - call when new items are added
+// Preload images helper
 void _preloadImages(List<PdfItem> items) {
   for (final pdf in items) {
     if (pdf.thumbnailUrl != null) {
-      // Trigger cache download
       CachedNetworkImageProvider(pdf.thumbnailUrl!).resolve(const ImageConfiguration()).addListener(
         ImageStreamListener((ImageInfo info, bool sync) {}),
       );
