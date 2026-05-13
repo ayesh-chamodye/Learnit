@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
 import 'package:dio/dio.dart';
@@ -6,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/progress_service.dart';
 
 class PdfViewerScreen extends StatefulWidget {
   final String pdfUrl;
@@ -32,6 +34,8 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   double _downloadProgress = 0.0;
   bool _isDownloading = false;
   bool _isBookmarked = false;
+  bool _hasRecordedStart = false;
+  Timer? _progressTimer;
 
   static final Map<String, String> _downloadedFiles = {};
 
@@ -39,6 +43,13 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   void initState() {
     super.initState();
     _preparePdf();
+  }
+
+  @override
+  void dispose() {
+    _progressTimer?.cancel();
+    _saveCurrentProgress();
+    super.dispose();
   }
 
   Future<void> _preparePdf() async {
@@ -50,7 +61,6 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
       return;
     }
 
-    // Check if already downloaded
     if (_downloadedFiles.containsKey(widget.pdfUrl)) {
       setState(() {
         _localFile = _downloadedFiles[widget.pdfUrl];
@@ -59,7 +69,6 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
       return;
     }
 
-    // Download the PDF
     await _downloadPdf();
   }
 
@@ -71,7 +80,6 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     });
 
     try {
-      // Request storage permission on Android
       if (Platform.isAndroid) {
         final status = await Permission.storage.request();
         if (!status.isGranted) {
@@ -82,18 +90,15 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
       final dio = Dio();
       String dirPath;
 
-      // Get download path from settings or use default
       final prefs = await SharedPreferences.getInstance();
       final savedPath = prefs.getString('download_path') ?? '';
 
       if (savedPath.isNotEmpty) {
         dirPath = savedPath;
       } else {
-        // Use default downloads directory
         if (Platform.isAndroid) {
           final directory = await getExternalStorageDirectory();
           dirPath = directory?.path ?? (await getApplicationDocumentsDirectory()).path;
-          // Try to use Downloads folder
           final downloadsDir = Directory('/storage/emulated/0/Download');
           if (await downloadsDir.exists()) {
             dirPath = downloadsDir.path;
@@ -106,7 +111,6 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
       final fileName = _sanitizeFileName(widget.title);
       final filePath = p.join(dirPath, '$fileName.pdf');
 
-      // Ensure directory exists
       await Directory(dirPath).create(recursive: true);
 
       await dio.download(
@@ -129,6 +133,13 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
           _isDownloading = false;
           _isLoading = false;
         });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('PDF saved: $filePath'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -137,9 +148,15 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
           _isDownloading = false;
           _isLoading = false;
         });
-       }
-     }
-   }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Download failed: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
 
   String _sanitizeFileName(String name) {
     final sanitized = name
@@ -148,10 +165,27 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     return sanitized.length > 50 ? sanitized.substring(0, 50) : sanitized;
   }
 
+  void _startProgressTracking() {
+    _progressTimer?.cancel();
+    _progressTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      _saveCurrentProgress();
+    });
+  }
+
+  void _saveCurrentProgress() {
+    if (_totalPages != null && _currentPage != null) {
+      ProgressService.updatePdfReadPosition(widget.pdfUrl, _currentPage!, _totalPages!);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final onSurface = theme.colorScheme.onSurface;
+    final primary = theme.colorScheme.primary;
+
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: theme.colorScheme.surface,
       appBar: AppBar(
         title: Text(
           widget.title,
@@ -178,14 +212,13 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
             onPressed: _localFile != null ? null : _downloadPdf,
             tooltip: 'Download PDF',
           ),
-          
         ],
       ),
-      body: _buildBody(),
+      body: _buildBody(theme, onSurface, primary),
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildBody(ThemeData theme, Color onSurface, Color primary) {
     if (_isLoading || _isDownloading) {
       return Center(
         child: Column(
@@ -194,17 +227,17 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
             if (_isDownloading) ...[
               CircularProgressIndicator(
                 value: _downloadProgress,
-                backgroundColor: Colors.grey[300],
-                color: Colors.blue[900],
+                backgroundColor: onSurface.withValues(alpha: 0.3),
+                color: primary,
               ),
               const SizedBox(height: 16),
               Text(
                 'Downloading... ${(_downloadProgress * 100).toStringAsFixed(0)}%',
-                style: TextStyle(color: Colors.grey[600]),
+                style: TextStyle(color: onSurface.withValues(alpha: 0.6)),
               ),
             ] else ...[
               CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.blue[900]!),
+                valueColor: AlwaysStoppedAnimation<Color>(primary),
               ),
               const SizedBox(height: 16),
               const Text('Loading PDF...'),
@@ -225,15 +258,15 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
               const SizedBox(height: 16),
               Text(
                 'Failed to load PDF',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.grey[800]),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: onSurface.withValues(alpha: 0.8)),
               ),
               const SizedBox(height: 8),
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.red[50],
+                  color: Colors.red.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.red[200]!),
+                  border: Border.all(color: Colors.red.shade200),
                 ),
                 child: Text(
                   _error!,
@@ -247,8 +280,8 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                 icon: const Icon(Icons.download),
                 label: const Text('Retry Download'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue[900],
-                  foregroundColor: Colors.white,
+                  backgroundColor: primary,
+                  foregroundColor: theme.colorScheme.onPrimary,
                 ),
               ),
             ],
@@ -258,7 +291,9 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     }
 
     if (_localFile == null) {
-      return const Center(child: Text('No PDF available'));
+      return Center(
+        child: Text('No PDF available', style: TextStyle(color: onSurface)),
+      );
     }
 
     return Column(
@@ -270,11 +305,22 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
             swipeHorizontal: true,
             autoSpacing: true,
             pageFling: true,
-            onRender: (pages) {
+            onRender: (pages) async {
+              if (!mounted) return;
               setState(() {
                 _totalPages = pages;
                 _isLoading = false;
               });
+              // Record PDF start only once per session
+              if (!_hasRecordedStart) {
+                await ProgressService.recordPdfStart(
+                  widget.pdfUrl,
+                  widget.title,
+                  totalPages: pages,
+                );
+                _hasRecordedStart = true;
+              }
+              _startProgressTracking();
             },
             onError: (error) {
               setState(() => _error = error.toString());
@@ -286,17 +332,17 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                 );
               }
             },
-            onViewCreated: (PDFViewController pdfViewController) {},
             onPageChanged: (int? page, int? total) {
+              if (!mounted) return;
               setState(() {
                 _currentPage = page;
               });
+              _saveCurrentProgress(); // save immediately on page change
             },
           ),
         ),
-        // Page indicator and download button
         Container(
-          color: Colors.white,
+          color: theme.colorScheme.surface,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
             children: [
@@ -304,7 +350,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                 Expanded(
                   child: Text(
                     'Page ${_currentPage ?? 1} of $_totalPages',
-                    style: const TextStyle(fontWeight: FontWeight.w500),
+                    style: TextStyle(fontWeight: FontWeight.w500, color: onSurface),
                   ),
                 ),
               IconButton(

@@ -8,6 +8,11 @@ class AppConfig {
   // YouTube API base URL
   static const String youtubeApiBaseUrl = 'www.googleapis.com';
 
+  // e-Thaksalawa API configuration
+  static const String ethaksalawaBaseUrl = 'v0-json-url-service.vercel.app';
+  static const String ethaksalawaApiPath = '/api/e-thaksalawa';
+  static const int ethaksalawaCacheTimeoutHours = 24; // Cache duration in hours
+
   // Default max results for API calls
   static const int defaultMaxResults = 25;
 

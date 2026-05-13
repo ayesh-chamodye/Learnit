@@ -28,15 +28,15 @@ class CategoryScreen extends StatefulWidget {
 }
 
 class _CategoryScreenState extends State<CategoryScreen> {
-  List<PdfItem> _allItems = []; // All loaded items (unfiltered)
-  List<PdfItem> _filteredItems = []; // Items after search filter
-  bool _isLoadingFirst = true; // First page loading
-  bool _isLoadingMore = false; // Additional pages loading
-  bool _isSearching = false; // Search-triggered full load in progress
+  List<PdfItem> _allItems = [];
+  List<PdfItem> _filteredItems = [];
+  bool _isLoadingFirst = true;
+  bool _isLoadingMore = false;
+  bool _isSearching = false;
   String? _error;
-  int _currentPage = 0; // Last loaded page number
-  int _totalPages = 1; // Total available pages
-  bool _hasFetchedFirstPage = false; // Track if page 1 has been fetched
+  int _currentPage = 0;
+  int _totalPages = 1;
+  bool _hasFetchedFirstPage = false;
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
@@ -45,7 +45,6 @@ class _CategoryScreenState extends State<CategoryScreen> {
     super.initState();
     _searchController.addListener(_onSearchChanged);
     _scrollController.addListener(_onScroll);
-    // Load only first page initially
     _loadFirstPage();
   }
 
@@ -61,11 +60,9 @@ class _CategoryScreenState extends State<CategoryScreen> {
   void _onSearchChanged() {
     final query = _searchController.text.trim();
     if (query.isNotEmpty) {
-      // User is searching - need to load all pages
       _isSearching = true;
       _loadAllPagesForSearch();
     } else {
-      // Search cleared
       _isSearching = false;
       _applySearch();
     }
@@ -88,7 +85,6 @@ class _CategoryScreenState extends State<CategoryScreen> {
   void _onScroll() {
     if (!_scrollController.hasClients) return;
     final position = _scrollController.position;
-    // Load more when scrolled to within 200px of bottom
     if (position.pixels >= position.maxScrollExtent - 200 &&
         !_isLoadingMore &&
         _currentPage < _totalPages &&
@@ -97,7 +93,6 @@ class _CategoryScreenState extends State<CategoryScreen> {
     }
   }
 
-  /// Load only the first page (page 1)
   Future<void> _loadFirstPage() async {
     setState(() {
       _isLoadingFirst = true;
@@ -106,8 +101,6 @@ class _CategoryScreenState extends State<CategoryScreen> {
 
     try {
       final result = await ApiService.fetchPdfsByCategory(widget.category, page: 1);
-
-      // Preload images for smooth scrolling
       _preloadImages(result.items);
 
       setState(() {
@@ -117,7 +110,6 @@ class _CategoryScreenState extends State<CategoryScreen> {
         _isLoadingFirst = false;
         _hasFetchedFirstPage = true;
         _applySearch();
-        // Update cache
         CategoryScreen._categoryCache[widget.category] = List.from(_allItems);
         CategoryScreen._categoryCurrentPage[widget.category] = _currentPage;
         CategoryScreen._categoryTotalPages[widget.category] = _totalPages;
@@ -130,7 +122,6 @@ class _CategoryScreenState extends State<CategoryScreen> {
     }
   }
 
-  /// Load next page (triggered by scroll)
   Future<void> _loadNextPage() async {
     final nextPage = _currentPage + 1;
     if (nextPage > _totalPages) return;
@@ -142,12 +133,8 @@ class _CategoryScreenState extends State<CategoryScreen> {
 
     try {
       final result = await ApiService.fetchPdfsByCategory(widget.category, page: nextPage);
-
-      // Avoid duplicates
       final existingIds = _allItems.map((e) => e.id).toSet();
       final newItems = result.items.where((item) => !existingIds.contains(item.id)).toList();
-
-      // Preload images
       _preloadImages(newItems);
 
       setState(() {
@@ -156,7 +143,6 @@ class _CategoryScreenState extends State<CategoryScreen> {
         _totalPages = result.totalPages;
         _isLoadingMore = false;
         _applySearch();
-        // Update cache
         CategoryScreen._categoryCache[widget.category] = List.from(_allItems);
         CategoryScreen._categoryCurrentPage[widget.category] = _currentPage;
         CategoryScreen._categoryTotalPages[widget.category] = _totalPages;
@@ -169,19 +155,15 @@ class _CategoryScreenState extends State<CategoryScreen> {
     }
   }
 
-  /// Load all remaining pages sequentially (used when search is active)
   Future<void> _loadAllPagesForSearch() async {
-    // Ensure first page is loaded to know totalPages
     if (!_hasFetchedFirstPage) {
       await _loadFirstPage();
-      // If error occurred, _loadFirstPage sets _error and returns
       if (_error != null) {
         _isSearching = false;
         return;
       }
     }
 
-    // Load pages one by one starting from current page + 1
     int pageToLoad = _currentPage + 1;
     while (pageToLoad <= _totalPages && mounted) {
       setState(() {
@@ -191,12 +173,8 @@ class _CategoryScreenState extends State<CategoryScreen> {
 
       try {
         final result = await ApiService.fetchPdfsByCategory(widget.category, page: pageToLoad);
-
-        // Avoid duplicates
         final existingIds = _allItems.map((e) => e.id).toSet();
         final newItems = result.items.where((item) => !existingIds.contains(item.id)).toList();
-
-        // Preload images
         _preloadImages(newItems);
 
         setState(() {
@@ -225,7 +203,6 @@ class _CategoryScreenState extends State<CategoryScreen> {
   }
 
   Future<void> _refresh() async {
-    // Clear cache and reload first page
     _hasFetchedFirstPage = false;
     CategoryScreen._categoryCache.remove(widget.category);
     CategoryScreen._categoryCurrentPage.remove(widget.category);
@@ -239,8 +216,11 @@ class _CategoryScreenState extends State<CategoryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final onSurface = theme.colorScheme.onSurface;
+
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: theme.colorScheme.surface,
       appBar: AppBar(
         title: Text(widget.title),
         backgroundColor: widget.color,
@@ -250,7 +230,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
       body: Column(
         children: [
           Container(
-            color: Colors.white,
+            color: theme.colorScheme.surface,
             padding: const EdgeInsets.all(16),
             child: TextField(
               controller: _searchController,
@@ -264,7 +244,6 @@ class _CategoryScreenState extends State<CategoryScreen> {
                       )
                     : null,
                 filled: true,
-                fillColor: Colors.grey[100],
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide.none,
@@ -280,15 +259,14 @@ class _CategoryScreenState extends State<CategoryScreen> {
               valueColor: AlwaysStoppedAnimation<Color>(widget.color),
             ),
           Expanded(
-            child: _buildBody(),
+            child: _buildBody(theme, onSurface),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildBody() {
-    // Show searching overlay when loading all pages for search
+  Widget _buildBody(ThemeData theme, Color onSurface) {
     if (_isSearching) {
       return Center(
         child: Column(
@@ -296,7 +274,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
           children: [
             CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(widget.color)),
             const SizedBox(height: 16),
-            Text('Searching all pages...', style: TextStyle(color: Colors.grey[600])),
+            Text('Searching all pages...', style: TextStyle(color: onSurface.withValues(alpha: 0.6))),
           ],
         ),
       );
@@ -309,7 +287,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
           children: [
             CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(widget.color)),
             const SizedBox(height: 16),
-            Text('Loading ${widget.title}...', style: TextStyle(color: Colors.grey[600])),
+            Text('Loading ${widget.title}...', style: TextStyle(color: onSurface.withValues(alpha: 0.6))),
           ],
         ),
       );
@@ -324,9 +302,9 @@ class _CategoryScreenState extends State<CategoryScreen> {
             children: [
               Icon(Icons.error_outline, size: 64, color: Colors.red[300]),
               const SizedBox(height: 16),
-              Text('Error loading ${widget.title}', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.grey[800])),
+              Text('Error loading ${widget.title}', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: onSurface.withValues(alpha: 0.8))),
               const SizedBox(height: 8),
-              Text(_error!, textAlign: TextAlign.center, style: TextStyle(color: Colors.grey[600])),
+              Text(_error!, textAlign: TextAlign.center, style: TextStyle(color: onSurface.withValues(alpha: 0.6))),
               const SizedBox(height: 20),
               ElevatedButton.icon(
                 onPressed: _refresh,
@@ -345,13 +323,13 @@ class _CategoryScreenState extends State<CategoryScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.search_off, size: 64, color: Colors.grey[400]),
+            Icon(Icons.search_off, size: 64, color: onSurface.withValues(alpha: 0.4)),
             const SizedBox(height: 16),
             Text(
               _searchController.text.isNotEmpty
                   ? 'No results for "${_searchController.text}"'
                   : 'No ${widget.title} available',
-              style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+              style: TextStyle(fontSize: 16, color: onSurface.withValues(alpha: 0.6)),
               textAlign: TextAlign.center,
             ),
           ],
@@ -367,7 +345,6 @@ class _CategoryScreenState extends State<CategoryScreen> {
         itemCount: _filteredItems.length + (_isLoadingMore && !_isSearching ? 1 : 0),
         itemBuilder: (context, index) {
           if (index == _filteredItems.length) {
-            // Loading more indicator at bottom
             return Padding(
               padding: const EdgeInsets.symmetric(vertical: 16),
               child: Center(
@@ -377,7 +354,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
                     const SizedBox(height: 8),
                     Text(
                       'Loading more...',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      style: TextStyle(fontSize: 12, color: onSurface.withValues(alpha: 0.6)),
                     ),
                   ],
                 ),
@@ -415,6 +392,9 @@ class _CategoryPdfCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final onSurface = theme.colorScheme.onSurface;
+
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -466,7 +446,7 @@ class _CategoryPdfCard extends StatelessWidget {
                   children: [
                     Text(
                       pdf.title,
-                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.black87),
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: onSurface),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -474,7 +454,7 @@ class _CategoryPdfCard extends StatelessWidget {
                       const SizedBox(height: 4),
                       Text(
                         pdf.description!,
-                        style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                        style: TextStyle(fontSize: 13, color: onSurface.withValues(alpha: 0.6)),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -482,19 +462,19 @@ class _CategoryPdfCard extends StatelessWidget {
                     const SizedBox(height: 8),
                     Row(
                       children: [
-                        Icon(Icons.menu_book, size: 12, color: Colors.grey[500]),
+                        Icon(Icons.menu_book, size: 12, color: onSurface.withValues(alpha: 0.5)),
                         const SizedBox(width: 4),
                         Text(
                           pdf.pageCount != null ? '${pdf.pageCount} pages' : 'PDF',
-                          style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                          style: TextStyle(fontSize: 11, color: onSurface.withValues(alpha: 0.6)),
                         ),
                         if (pdf.category != null) ...[
                           const SizedBox(width: 12),
-                          Icon(Icons.category, size: 12, color: Colors.grey[500]),
+                          Icon(Icons.category, size: 12, color: onSurface.withValues(alpha: 0.5)),
                           const SizedBox(width: 4),
                           Text(
                             pdf.category!,
-                            style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                            style: TextStyle(fontSize: 11, color: onSurface.withValues(alpha: 0.6)),
                           ),
                         ],
                       ],

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:file_picker/file_picker.dart';
+import '../main.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -29,7 +30,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _autoDownload = prefs.getBool('auto_download') ?? false;
       _notificationsEnabled = prefs.getBool('notifications') ?? true;
     });
-    // Apply theme on load
     _applyTheme(_isDarkMode);
   }
 
@@ -43,7 +43,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _selectDownloadPath() async {
     try {
-      // Use file_picker to select directory
       String? selectedDirectory = await FilePicker.platform.getDirectoryPath(
         dialogTitle: 'Select Download Folder',
       );
@@ -75,36 +74,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _applyTheme(bool isDark) {
-    // This will be used by the main app to switch themes
-    // We'll store the preference and the home screen will read it
-    // The actual theme change happens in the MaterialApp builder
-    // We'll trigger a rebuild of the app by updating shared preferences
-    // The main.dart will listen to changes via a Stream or we can use a state management solution
-    // For simplicity, we'll just save and the app will apply on next load
-    // But we can also notify listeners if we set up a provider
-    // For now, let's add a simple callback approach
+    MyApp.of(context)?.setTheme(isDark);
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final onSurface = theme.colorScheme.onSurface;
+
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: theme.colorScheme.surface,
       appBar: AppBar(
         title: const Text('Settings'),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        foregroundColor: Colors.white,
+        backgroundColor: theme.colorScheme.primary,
+        foregroundColor: theme.colorScheme.onPrimary,
         elevation: 0,
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // Download Settings Section
-          _buildSectionHeader('Downloads'),
+          _buildSectionHeader('Downloads', onSurface),
           _buildSettingCard(
             icon: Icons.folder,
             title: 'Download Path',
             subtitle: _downloadPath.isEmpty ? 'Not set (default Downloads)' : _downloadPath,
             onTap: _selectDownloadPath,
+            onSurface: onSurface,
+            primaryColor: theme.colorScheme.primary,
           ),
           const SizedBox(height: 8),
           _buildSwitchSetting(
@@ -118,11 +114,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               });
               _saveSettings();
             },
+            onSurface: onSurface,
+            primaryColor: theme.colorScheme.primary,
           ),
           const SizedBox(height: 24),
-
-          // Appearance Section
-          _buildSectionHeader('Appearance'),
+          _buildSectionHeader('Appearance', onSurface),
           _buildSwitchSetting(
             icon: Icons.dark_mode,
             title: 'Dark Mode',
@@ -133,20 +129,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _isDarkMode = value;
               });
               _saveSettings();
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(value ? 'Dark mode enabled - restart to apply' : 'Light mode enabled - restart to apply'),
-                    backgroundColor: Colors.blue,
-                  ),
-                );
-              }
+              _applyTheme(value);
             },
+            onSurface: onSurface,
+            primaryColor: theme.colorScheme.primary,
           ),
           const SizedBox(height: 24),
-
-          // Notifications Section
-          _buildSectionHeader('Notifications'),
+          _buildSectionHeader('Notifications', onSurface),
           _buildSwitchSetting(
             icon: Icons.notifications,
             title: 'Enable Notifications',
@@ -158,37 +147,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
               });
               _saveSettings();
             },
+            onSurface: onSurface,
+            primaryColor: theme.colorScheme.primary,
           ),
           const SizedBox(height: 24),
-
-          // About Section
-          _buildSectionHeader('About'),
+          _buildSectionHeader('About', onSurface),
           _buildSettingCard(
             icon: Icons.info,
             title: 'Version',
             subtitle: '1.0.0',
             onTap: () {},
+            onSurface: onSurface,
+            primaryColor: theme.colorScheme.primary,
           ),
           _buildSettingCard(
             icon: Icons.privacy_tip,
             title: 'Privacy Policy',
             onTap: () {},
+            onSurface: onSurface,
+            primaryColor: theme.colorScheme.primary,
           ),
           _buildSettingCard(
             icon: Icons.description,
             title: 'Terms of Service',
             onTap: () {},
+            onSurface: onSurface,
+            primaryColor: theme.colorScheme.primary,
           ),
           const SizedBox(height: 32),
-
-          // Clear Cache Button
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: ElevatedButton.icon(
               onPressed: () async {
+                final dialogContext = context;
                 final scaffoldContext = context;
                 final confirmed = await showDialog<bool>(
-                  context: context,
+                  context: dialogContext,
                   builder: (context) => AlertDialog(
                     title: const Text('Clear Cache'),
                     content: const Text('This will clear all cached PDF thumbnails. Continue?'),
@@ -204,14 +198,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ],
                   ),
                 );
-                if (confirmed == true) {
-                  // TODO: Implement cache clearing
-                  if (mounted) {
-                    ScaffoldMessenger.of(scaffoldContext).showSnackBar(
-                      const SnackBar(content: Text('Cache cleared')),
-                    );
-                  }
-                }
+                if (confirmed != true) return;
+                if (!mounted) return;
+                ScaffoldMessenger.of(scaffoldContext).showSnackBar(
+                  const SnackBar(content: Text('Cache cleared')),
+                );
               },
               icon: const Icon(Icons.cleaning_services),
               label: const Text('Clear Cache'),
@@ -225,18 +216,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 16),
         ],
       ),
-     );
-   }
+    );
+  }
 
-  Widget _buildSectionHeader(String title) {
+  Widget _buildSectionHeader(String title, Color onSurface) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Text(
         title,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 14,
           fontWeight: FontWeight.w600,
-          color: Colors.grey,
+          color: onSurface.withValues(alpha: 0.6),
           letterSpacing: 0.5,
         ),
       ),
@@ -248,6 +239,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     required String title,
     String? subtitle,
     required VoidCallback onTap,
+    required Color onSurface,
+    required Color primaryColor,
   }) {
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -257,10 +250,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         leading: Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+            color: primaryColor.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Icon(icon, color: Theme.of(context).colorScheme.primary, size: 20),
+          child: Icon(icon, color: primaryColor, size: 20),
         ),
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
         subtitle: subtitle != null
@@ -268,7 +261,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 subtitle,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                style: TextStyle(fontSize: 12, color: onSurface.withValues(alpha: 0.6)),
               )
             : null,
         trailing: const Icon(Icons.chevron_right, size: 20),
@@ -283,6 +276,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     required String subtitle,
     required bool value,
     required ValueChanged<bool> onChanged,
+    required Color onSurface,
+    required Color primaryColor,
   }) {
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -292,15 +287,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
         secondary: Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+            color: primaryColor.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Icon(icon, color: Theme.of(context).colorScheme.primary, size: 20),
+          child: Icon(icon, color: primaryColor, size: 20),
         ),
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
         subtitle: Text(
           subtitle,
-          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+          style: TextStyle(fontSize: 12, color: onSurface.withValues(alpha: 0.6)),
         ),
         value: value,
         onChanged: onChanged,
