@@ -47,8 +47,8 @@ class _CoursesTabContentState extends State<CoursesTabContent> {
 
   Future<void> _loadFilters() async {
     try {
-      // Grades 01-13 as zero-padded strings (API format)
-      final grades = List.generate(13, (i) => (i + 1).toString().padLeft(2, '0'));
+      // Grades 1-13 as plain numbers (not zero-padded)
+      final grades = List.generate(13, (i) => (i + 1).toString());
       // Languages in order
       final languages = ['Sinhala', 'English', 'Tamil'];
       
@@ -56,8 +56,8 @@ class _CoursesTabContentState extends State<CoursesTabContent> {
         setState(() {
           _availableGrades = grades;
           _availableLanguages = languages;
-          // Set defaults: Grade 01, Sinhala
-          _selectedGrade = '01';
+          // Set defaults: Grade 1, Sinhala
+          _selectedGrade = '1';
           _selectedLanguage = 'Sinhala';
         });
       }
@@ -67,6 +67,7 @@ class _CoursesTabContentState extends State<CoursesTabContent> {
   }
 
   Future<PaginatedResult<CourseItem>> _fetchPage(int page) async {
+    debugPrint('[_fetchPage] grade=$_selectedGrade, language=$_selectedLanguage, subject=$_selectedSubject, page=$page');
     return await EthaksalawaService.fetchCourses(
       grade: _selectedGrade,
       language: _selectedLanguage,
@@ -82,8 +83,10 @@ class _CoursesTabContentState extends State<CoursesTabContent> {
       _error = null;
     });
     try {
+      debugPrint('[_loadFirstPage] fetching...');
       final result = await _fetchPage(1);
       if (!mounted) return;
+      debugPrint('[_loadFirstPage] got ${result.items.length} items');
       setState(() {
         _courses = result.items;
         _currentPage = result.currentPage;
@@ -98,14 +101,15 @@ class _CoursesTabContentState extends State<CoursesTabContent> {
           ..sort();
         _isLoadingFirst = false;
       });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.toString();
-        _isLoadingFirst = false;
-      });
-    }
-  }
+     } catch (e) {
+       if (!mounted) return;
+       debugPrint('[_loadFirstPage] error: $e');
+       setState(() {
+         _error = e.toString();
+         _isLoadingFirst = false;
+       });
+     }
+   }
 
   Future<void> _loadNextPage() async {
     if (_isLoadingMore || _currentPage >= _totalPages) return;
@@ -664,14 +668,14 @@ class _CourseListItem extends StatelessWidget {
                     color: theme.colorScheme.primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(4),
                   ),
-                  child: Text(
-                    'Gr ${course.grade}',
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: theme.colorScheme.primary,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
+                   child: Text(
+                     'Gr ${int.parse(course.grade!)}',
+                     style: TextStyle(
+                       fontSize: 10,
+                       color: theme.colorScheme.primary,
+                       fontWeight: FontWeight.w500,
+                     ),
+                   ),
                 ),
               if (course.language != null) ...[
                 const SizedBox(width: 4),

@@ -33,7 +33,7 @@ class EthaksalawaService {
       final queryParams = <String, String>{
         'page': page.toString(),
       };
-      if (grade != null && grade.isNotEmpty) queryParams['grade'] = grade;
+      if (grade != null && grade.isNotEmpty) queryParams['grade'] = int.parse(grade).toString();
       if (language != null && language.isNotEmpty) queryParams['language'] = language;
       if (subject != null && subject.isNotEmpty) queryParams['subject'] = subject;
       if (searchQuery != null && searchQuery.isNotEmpty) queryParams['search'] = searchQuery;
@@ -48,6 +48,7 @@ class EthaksalawaService {
 
       if (kDebugMode) {
         debugPrint('[Ethaksalawa] Request URL: ${response.requestOptions.uri}');
+        debugPrint('[Ethaksalawa] Filters: grade=$grade, language=$language, subject=$subject, search=$searchQuery, page=$page');
       }
 
       final dynamic decoded = response.data;
@@ -88,17 +89,9 @@ class EthaksalawaService {
         }
       }
 
-      // Apply filters client-side
-      List<CourseItem> filtered = courses;
-      if (grade != null && grade.isNotEmpty) {
-        filtered = filtered.where((c) => c.grade == grade).toList();
-      }
-      if (language != null && language.isNotEmpty) {
-        filtered = filtered.where((c) => c.language == language).toList();
-      }
-      if (subject != null && subject.isNotEmpty) {
-        filtered = filtered.where((c) => c.subject == subject).toList();
-      }
+      // API already applies filters server-side, so we use the courses directly
+      // However, we still need to apply searchQuery locally if provided
+      var filtered = courses;
       if (searchQuery != null && searchQuery.isNotEmpty) {
         final q = searchQuery.toLowerCase();
         filtered = filtered.where((c) =>
@@ -108,7 +101,7 @@ class EthaksalawaService {
       }
 
       if (kDebugMode) {
-        debugPrint('[Ethaksalawa] After filters: ${filtered.length} courses');
+        debugPrint('[Ethaksalawa] After any local filtering: ${filtered.length} / ${courses.length} courses');
       }
 
       // Try to get pagination info from API response
@@ -156,7 +149,14 @@ class EthaksalawaService {
 
   static Future<List<String>> getAvailableGrades() async {
     final result = await fetchCourses();
-    final grades = result.items.map((c) => c.grade).where((g) => g != null && g.isNotEmpty).cast<String>().toSet().toList()..sort();
+    final grades = result.items
+        .map((c) => c.grade)
+        .where((g) => g != null && g.isNotEmpty)
+        .cast<String>()
+        .map((g) => int.parse(g).toString())
+        .toSet()
+        .toList()
+      ..sort();
     return grades;
   }
 

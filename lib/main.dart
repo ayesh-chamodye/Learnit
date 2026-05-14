@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'screens/splash_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/progress_screen.dart';
@@ -9,10 +9,13 @@ import 'screens/progress_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Initialize AdMob
+  await MobileAds.instance.initialize();
+
   // Load saved theme
   final prefs = await SharedPreferences.getInstance();
   final isDarkMode = prefs.getBool('dark_mode') ?? false;
-   
+    
   runApp(MyApp(initialDarkMode: isDarkMode));
 }
 
