@@ -39,7 +39,6 @@ dependencies:
   open_filex: ^4.7.0
   path: ^1.9.1
   webview_flutter: ^4.13.1
-  cached_network_image: ^3.4.1
   video_player: ^2.8.2
   youtube_player_flutter: ^9.0.0
   shared_preferences: ^2.2.2
@@ -71,6 +70,7 @@ flutter:
   assets:
     - assets/images/image.png
     - assets/icon.png
+
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

@@ -1,0 +1,92 @@
+[
+  {
+    "id": "pp_001",
+    "title": "Grade 10 Mathematics Past Paper 2023",
+    "description": "Final examination paper from 2023",
+    "thumbnailUrl": "https://via.placeholder.com/150x200/4CAF50/ffffff?text=Math+2023",
+    "pdfUrl": "https://example.com/papers/math10_2023.pdf",
+    "pageCount": 12,
+    "category": "past-papers"
+  },
+  {
+    "id": "pp_002",
+    "title": "Grade 11 Science Past Paper 2023",
+    "description": "Science final exam paper 2023",
+    "thumbnailUrl": "https://via.placeholder.com/150x200/2196F3/ffffff?text=Science+2023",
+    "pdfUrl": "https://example.com/papers/science11_2023.pdf",
+    "pageCount": 10,
+    "category": "past-papers"
+  },
+  {
+    "id": "mp_001",
+    "title": "Grade 10 Mathematics Model Paper",
+    "description": "Practice model paper for grade 10 math",
+    "thumbnailUrl": "https://via.placeholder.com/150x200/FF9800/ffffff?text=Model+Math",
+    "pdfUrl": "https://example.com/model/math10_model.pdf",
+    "pageCount": 15,
+    "category": "model-papers"
+  },
+  {
+    "id": "tg_001",
+    "title": "Grade 11 Physics Teacher Guide",
+    "description": "Comprehensive teacher guide for grade 11 physics",
+    "thumbnailUrl": "https://via.placeholder.com/150x200/9C27B0/ffffff?text=Physics+TG",
+    "pdfUrl": "https://example.com/guides/physics11_tg.pdf",
+    "pageCount": 85,
+    "category": "teacher-guides"
+  },
+  {
+    "id": "tt_001",
+    "title": "Grade 10 Term Test - Mathematics",
+    "description": "Term 1 mathematics test for grade 10",
+    "thumbnailUrl": "https://via.placeholder.com/150x200/F44336/ffffff?text=Term+Test",
+    "pdfUrl": "https://example.com/tests/math10_term1.pdf",
+    "pageCount": 6,
+    "category": "term-test-papers"
+  },
+  {
+    "id": "tb_001",
+    "title": "Grade 9 Mathematics Textbook",
+    "description": "Official mathematics textbook for grade 9",
+    "thumbnailUrl": "https://via.placeholder.com/150x200/607D8B/ffffff?text=Math+Textbook",
+    "pdfUrl": "https://example.com/textbooks/math9_textbook.pdf",
+    "pageCount": 250,
+    "category": "text-books"
+  },
+  {
+    "id": "pp_003",
+    "title": "Grade 12 Biology Past Paper 2023",
+    "description": "Biology advanced level past paper",
+    "thumbnailUrl": "https://via.placeholder.com/150x200/4CAF50/ffffff?text=Bio+2023",
+    "pdfUrl": "https://example.com/papers/bio12_2023.pdf",
+    "pageCount": 14,
+    "category": "past-papers"
+  },
+  {
+    "id": "mp_002",
+    "title": "Grade 12 Chemistry Model Paper",
+    "description": "Chemistry model paper with answers",
+    "thumbnailUrl": "https://via.placeholder.com/150x200/FF9800/ffffff?text=Chem+Model",
+    "pdfUrl": "https://example.com/model/chemistry12_model.pdf",
+    "pageCount": 18,
+    "category": "model-papers"
+  },
+  {
+    "id": "tg_002",
+    "title": "Grade 10 ICT Teacher Guide",
+    "description": "Complete teacher guide for ICT grade 10",
+    "thumbnailUrl": "https://via.placeholder.com/150x200/9C27B0/ffffff?text=ICT+Guide",
+    "pdfUrl": "https://example.com/guides/ict10_guide.pdf",
+    "pageCount": 120,
+    "category": "teacher-guides"
+  },
+  {
+    "id": "tb_002",
+    "title": "Grade 11 Physics Textbook",
+    "description": "Physics textbook for advanced level",
+    "thumbnailUrl": "https://via.placeholder.com/150x200/607D8B/ffffff?text=Physics+TB",
+    "pdfUrl": "https://example.com/textbooks/physics11_textbook.pdf",
+    "pageCount": 300,
+    "category": "text-books"
+  }
+]

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/pdf_model.dart';
 import '../services/api_service.dart';
 import 'pdf_viewer_screen.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+
 
 class CategoryScreen extends StatefulWidget {
   final String category;
@@ -21,10 +21,7 @@ class CategoryScreen extends StatefulWidget {
   @override
   State<CategoryScreen> createState() => _CategoryScreenState();
 
-  // Static cache shared across all CategoryScreen instances
-  static final Map<String, List<PdfItem>> _categoryCache = {};
-  static final Map<String, int> _categoryCurrentPage = {};
-  static final Map<String, int> _categoryTotalPages = {};
+
 }
 
 class _CategoryScreenState extends State<CategoryScreen> {
@@ -101,19 +98,16 @@ class _CategoryScreenState extends State<CategoryScreen> {
 
     try {
       final result = await ApiService.fetchPdfsByCategory(widget.category, page: 1);
-      _preloadImages(result.items);
 
-      setState(() {
-        _allItems = List.from(result.items);
-        _currentPage = result.currentPage;
-        _totalPages = result.totalPages;
-        _isLoadingFirst = false;
-        _hasFetchedFirstPage = true;
-        _applySearch();
-        CategoryScreen._categoryCache[widget.category] = List.from(_allItems);
-        CategoryScreen._categoryCurrentPage[widget.category] = _currentPage;
-        CategoryScreen._categoryTotalPages[widget.category] = _totalPages;
-      });
+
+       setState(() {
+         _allItems = List.from(result.items);
+         _currentPage = result.currentPage;
+         _totalPages = result.totalPages;
+         _isLoadingFirst = false;
+         _hasFetchedFirstPage = true;
+         _applySearch();
+       });
     } catch (e) {
       setState(() {
         _error = e.toString();
@@ -122,38 +116,34 @@ class _CategoryScreenState extends State<CategoryScreen> {
     }
   }
 
-  Future<void> _loadNextPage() async {
-    final nextPage = _currentPage + 1;
-    if (nextPage > _totalPages) return;
+   Future<void> _loadNextPage() async {
+     final nextPage = _currentPage + 1;
+     if (nextPage > _totalPages) return;
 
-    setState(() {
-      _isLoadingMore = true;
-      _error = null;
-    });
+     setState(() {
+       _isLoadingMore = true;
+       _error = null;
+     });
 
-    try {
-      final result = await ApiService.fetchPdfsByCategory(widget.category, page: nextPage);
-      final existingIds = _allItems.map((e) => e.id).toSet();
-      final newItems = result.items.where((item) => !existingIds.contains(item.id)).toList();
-      _preloadImages(newItems);
+     try {
+       final result = await ApiService.fetchPdfsByCategory(widget.category, page: nextPage);
+       final existingIds = _allItems.map((e) => e.id).toSet();
+       final newItems = result.items.where((item) => !existingIds.contains(item.id)).toList();
 
-      setState(() {
-        _allItems.addAll(newItems);
-        _currentPage = result.currentPage;
-        _totalPages = result.totalPages;
-        _isLoadingMore = false;
-        _applySearch();
-        CategoryScreen._categoryCache[widget.category] = List.from(_allItems);
-        CategoryScreen._categoryCurrentPage[widget.category] = _currentPage;
-        CategoryScreen._categoryTotalPages[widget.category] = _totalPages;
-      });
-    } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _isLoadingMore = false;
-      });
-    }
-  }
+       setState(() {
+         _allItems.addAll(newItems);
+         _currentPage = result.currentPage;
+         _totalPages = result.totalPages;
+         _isLoadingMore = false;
+         _applySearch();
+       });
+     } catch (e) {
+       setState(() {
+         _error = e.toString();
+         _isLoadingMore = false;
+       });
+     }
+   }
 
   Future<void> _loadAllPagesForSearch() async {
     if (!_hasFetchedFirstPage) {
@@ -175,7 +165,6 @@ class _CategoryScreenState extends State<CategoryScreen> {
         final result = await ApiService.fetchPdfsByCategory(widget.category, page: pageToLoad);
         final existingIds = _allItems.map((e) => e.id).toSet();
         final newItems = result.items.where((item) => !existingIds.contains(item.id)).toList();
-        _preloadImages(newItems);
 
         setState(() {
           _allItems.addAll(newItems);
@@ -204,9 +193,6 @@ class _CategoryScreenState extends State<CategoryScreen> {
 
   Future<void> _refresh() async {
     _hasFetchedFirstPage = false;
-    CategoryScreen._categoryCache.remove(widget.category);
-    CategoryScreen._categoryCurrentPage.remove(widget.category);
-    CategoryScreen._categoryTotalPages.remove(widget.category);
     _allItems.clear();
     _filteredItems.clear();
     _currentPage = 0;
@@ -367,14 +353,20 @@ class _CategoryScreenState extends State<CategoryScreen> {
             child: _CategoryPdfCard(
               pdf: pdf,
               color: widget.color,
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => PdfViewerScreen(pdfUrl: pdf.pdfUrl ?? '', title: pdf.title),
-                  ),
-                );
-              },
+               onTap: () {
+                 if (pdf.pdfUrl == null || pdf.pdfUrl!.isEmpty) {
+                   ScaffoldMessenger.of(context).showSnackBar(
+                     const SnackBar(content: Text('PDF not available')),
+                   );
+                   return;
+                 }
+                 Navigator.push(
+                   context,
+                   MaterialPageRoute(
+                     builder: (context) => PdfViewerScreen(pdfUrl: pdf.pdfUrl!, title: pdf.title),
+                   ),
+                 );
+               },
             ),
           );
         },
@@ -416,25 +408,28 @@ class _CategoryPdfCard extends StatelessWidget {
                 child: pdf.thumbnailUrl != null
                     ? ClipRRect(
                         borderRadius: BorderRadius.circular(8),
-                        child: CachedNetworkImage(
-                          imageUrl: pdf.thumbnailUrl!,
+                        child: Image.network(
+                          pdf.thumbnailUrl!,
                           width: double.infinity,
                           height: double.infinity,
                           fit: BoxFit.cover,
-                          placeholder: (context, url) => Container(
-                            color: color.withValues(alpha: 0.08),
-                            child: Center(
-                              child: SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(color),
+                          loadingBuilder: (context, child, loadingProgress) {
+                            if (loadingProgress == null) return child;
+                            return Container(
+                              color: color.withValues(alpha: 0.08),
+                              child: Center(
+                                child: SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(color),
+                                  ),
                                 ),
                               ),
-                            ),
-                          ),
-                          errorWidget: (context, url, error) => _buildPdfIcon(color),
+                            );
+                          },
+                          errorBuilder: (context, error, stackTrace) => _buildPdfIcon(color),
                         ),
                       )
                     : _buildPdfIcon(color),
@@ -496,13 +491,4 @@ class _CategoryPdfCard extends StatelessWidget {
   }
 }
 
-// Preload images helper
-void _preloadImages(List<PdfItem> items) {
-  for (final pdf in items) {
-    if (pdf.thumbnailUrl != null) {
-      CachedNetworkImageProvider(pdf.thumbnailUrl!).resolve(const ImageConfiguration()).addListener(
-        ImageStreamListener((ImageInfo info, bool sync) {}),
-      );
-    }
-  }
-}
+

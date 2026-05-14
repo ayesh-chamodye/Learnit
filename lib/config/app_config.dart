@@ -18,4 +18,9 @@ class AppConfig {
 
   // Whether to use the YouTube Data API (true) or fall back to RSS (false)
   static bool get useYouTubeApi => youtubeApiKey.isNotEmpty && youtubeApiKey != 'YOUR_YOUTUBE_API_KEY_HERE';
+
+  // URLs for downloading JSON data files (set these to your hosted JSON endpoints)
+  // These JSON files should contain arrays of course/pdf objects matching the model structures
+  static const String coursesJsonUrl = 'https://v0-json-url-service.vercel.app/api/e-thaksalawa/courses';
+  static const String pdfsJsonUrl = 'https://v0-json-url-service.vercel.app/api/scrape/past-papers';
 }

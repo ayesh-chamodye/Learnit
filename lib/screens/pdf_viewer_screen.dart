@@ -8,6 +8,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/progress_service.dart';
+import '../services/api_client.dart';
 
 class PdfViewerScreen extends StatefulWidget {
   final String pdfUrl;
@@ -73,6 +74,28 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   }
 
   Future<void> _downloadPdf() async {
+    // Validate URL upfront
+    if (widget.pdfUrl.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _error = 'Cannot download: PDF URL is empty';
+          _isLoading = false;
+        });
+      }
+      return;
+    }
+
+    final uri = Uri.tryParse(widget.pdfUrl);
+    if (uri == null || !uri.hasAbsolutePath) {
+      if (mounted) {
+        setState(() {
+          _error = 'Invalid PDF URL';
+          _isLoading = false;
+        });
+      }
+      return;
+    }
+
     setState(() {
       _isDownloading = true;
       _downloadProgress = 0.0;
@@ -87,9 +110,10 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
         }
       }
 
-      final dio = Dio();
-      String dirPath;
+      // Use configured ApiClient for consistent settings
+      final dio = ApiClient().dio;
 
+      String dirPath;
       final prefs = await SharedPreferences.getInstance();
       final savedPath = prefs.getString('download_path') ?? '';
 
@@ -311,7 +335,6 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                 _totalPages = pages;
                 _isLoading = false;
               });
-              // Record PDF start only once per session
               if (!_hasRecordedStart) {
                 await ProgressService.recordPdfStart(
                   widget.pdfUrl,
@@ -337,7 +360,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
               setState(() {
                 _currentPage = page;
               });
-              _saveCurrentProgress(); // save immediately on page change
+              _saveCurrentProgress();
             },
           ),
         ),

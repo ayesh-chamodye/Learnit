@@ -1,155 +1,191 @@
-import 'dart:convert';
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
-import '../config/app_config.dart';
 import '../models/course_model.dart';
+import 'api_service.dart';
 
+/// Service for fetching courses directly from API (no offline storage)
 class EthaksalawaService {
-  static const String _baseUrl = AppConfig.ethaksalawaBaseUrl;
-  static const String _apiPath = AppConfig.ethaksalawaApiPath;
+  static const String _baseUrl = 'https://v0-json-url-service.vercel.app/api/e-thaksalawa';
+  // Use a Dio instance with longer timeout for this slow API
+  static final Dio _dio = Dio(
+    BaseOptions(
+      connectTimeout: const Duration(seconds: 300),
+      receiveTimeout: const Duration(seconds: 300),
+      sendTimeout: const Duration(seconds: 300),
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'User-Agent': 'LearnItApp/1.0 (Flutter)',
+      },
+    ),
+  );
 
-  /// Fetch courses with optional filters directly from API
-  /// [language]: Sinhala, English, Tamil
-  /// [subject]: science, maths, etc.
-  /// [grade]: 06, 07, 08, etc.
-  static Future<List<CourseItem>> fetchCourses({
+  static Future<PaginatedResult<CourseItem>> fetchCourses({
+    String? grade,
     String? language,
     String? subject,
-    String? grade,
+    String? searchQuery,
+    int page = 1,
+    bool forceRefresh = false,
   }) async {
-    // Build URI with query parameters
-    final uri = Uri.https(
-      _baseUrl,
-      _apiPath,
-      {
-        if (language != null) 'language': language,
-        if (subject != null) 'subject': subject.toLowerCase(),
-        if (grade != null) 'grade': grade,
-      },
-    );
-
-    debugPrint('[Ethaksalawa] Fetching: $uri');
-
     try {
-      final response = await http.get(
-        uri,
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': 'LearnItApp/1.0 (Flutter)',
-          'Accept': 'application/json',
-        },
-      ).timeout(const Duration(seconds: 15));
+      // Build query parameters - only page, others are filters
+      final queryParams = <String, String>{
+        'page': page.toString(),
+      };
+      if (grade != null && grade.isNotEmpty) queryParams['grade'] = grade;
+      if (language != null && language.isNotEmpty) queryParams['language'] = language;
+      if (subject != null && subject.isNotEmpty) queryParams['subject'] = subject;
+      if (searchQuery != null && searchQuery.isNotEmpty) queryParams['search'] = searchQuery;
 
+      final response = await _dio.get(
+        _baseUrl,
+        queryParameters: queryParams.isEmpty ? null : queryParams,
+      );
       if (response.statusCode != 200) {
-        debugPrint('[Ethaksalawa] HTTP ${response.statusCode}: ${response.body.substring(0, response.body.length.clamp(0, 500))}');
         throw Exception('Failed to load courses: ${response.statusCode}');
       }
 
-      final dynamic decoded = jsonDecode(response.body);
-      debugPrint('[Ethaksalawa] Raw response length: ${response.body.length}');
-
-      // Extract 'videos' array from response
-      final videos = _extractVideosArray(decoded);
-      if (videos == null || videos.isEmpty) {
-        debugPrint('[Ethaksalawa] No videos found in response');
-        return [];
+      if (kDebugMode) {
+        debugPrint('[Ethaksalawa] Request URL: ${response.requestOptions.uri}');
       }
 
-      // Parse into CourseItem objects
-      final courses = <CourseItem>[];
-      for (final json in videos) {
-        if (json is Map<String, dynamic>) {
-          try {
-            final course = CourseItem.fromJson(json);
-            courses.add(course);
-          } catch (e) {
-            debugPrint('[Ethaksalawa] Parse error: $e');
+      final dynamic decoded = response.data;
+      List<dynamic> items = [];
+
+      // The API returns videos at the top level
+      if (decoded is Map<String, dynamic>) {
+        if (kDebugMode) {
+          debugPrint('[Ethaksalawa] Response keys: ${decoded.keys}');
+          debugPrint('[Ethaksalawa] Total: ${decoded['total']}, totalPages: ${decoded['totalPages']}');
+        }
+        items = decoded['videos'] ?? [];
+        if (kDebugMode) {
+          debugPrint('[Ethaksalawa] Found ${items.length} videos in response');
+        }
+        // Also check for nested data structure
+        if (items.isEmpty) {
+          final data = decoded['data'];
+          if (data is Map<String, dynamic>) {
+            items = data['items'] ?? data['videos'] ?? [];
           }
+        }
+      } else if (decoded is List) {
+        items = decoded;
+      } else {
+        items = [];
+      }
+
+      final courses = items
+          .whereType<Map<String, dynamic>>()
+          .map((item) => CourseItem.fromJson(item))
+          .toList();
+
+      if (kDebugMode) {
+        debugPrint('[Ethaksalawa] Parsed ${courses.length} courses from ${items.length} items');
+        for (final c in courses.take(3)) {
+          debugPrint('[Ethaksalawa] Sample: grade=${c.grade}, lang=${c.language}, subject=${c.subject}');
         }
       }
 
-      debugPrint('[Ethaksalawa] Parsed ${courses.length} courses (before dedup)');
-
-      // Deduplicate by youtubeUrl to remove duplicates
-      final seenUrls = <String>{};
-      final uniqueCourses = <CourseItem>[];
-      for (final course in courses) {
-        final url = course.youtubeUrl;
-        if (url != null) {
-          if (!seenUrls.contains(url)) {
-            seenUrls.add(url);
-            uniqueCourses.add(course);
-          }
-        } else {
-          uniqueCourses.add(course);
-        }
+      // Apply filters client-side
+      List<CourseItem> filtered = courses;
+      if (grade != null && grade.isNotEmpty) {
+        filtered = filtered.where((c) => c.grade == grade).toList();
+      }
+      if (language != null && language.isNotEmpty) {
+        filtered = filtered.where((c) => c.language == language).toList();
+      }
+      if (subject != null && subject.isNotEmpty) {
+        filtered = filtered.where((c) => c.subject == subject).toList();
+      }
+      if (searchQuery != null && searchQuery.isNotEmpty) {
+        final q = searchQuery.toLowerCase();
+        filtered = filtered.where((c) =>
+            c.title.toLowerCase().contains(q) ||
+            (c.subject?.toLowerCase() ?? '').contains(q) ||
+            (c.description?.toLowerCase() ?? '').contains(q)).toList();
       }
 
-      debugPrint('[Ethaksalawa] After dedup: ${uniqueCourses.length} courses');
-      return uniqueCourses;
+      if (kDebugMode) {
+        debugPrint('[Ethaksalawa] After filters: ${filtered.length} courses');
+      }
+
+      // Try to get pagination info from API response
+      int totalPages = 1;
+      int currentPage = page;
+      if (decoded is Map<String, dynamic>) {
+        totalPages = (decoded['totalPages'] ?? 1) as int;
+        currentPage = (decoded['currentPage'] ?? page) as int;
+      }
+
+      if (kDebugMode) {
+        debugPrint('[Ethaksalawa] Fetched ${courses.length} courses on page $page/$totalPages, filtered to ${filtered.length}');
+      }
+
+      return PaginatedResult<CourseItem>(
+        items: filtered,
+        currentPage: currentPage,
+        totalPages: totalPages,
+      );
     } catch (e) {
-      debugPrint('[Ethaksalawa] Network error: $e');
+      debugPrint('[Ethaksalawa] Error: $e');
       rethrow;
     }
   }
 
-  /// Extract 'videos' array from API response.
-  /// Handles both { "videos": [...] } and direct array responses.
-  static List<dynamic>? _extractVideosArray(dynamic decoded) {
-    if (decoded is List) {
-      return decoded;
-    }
-    if (decoded is Map<String, dynamic>) {
-      final videos = decoded['videos'];
-      if (videos is List) return videos;
-      // Also check alternative keys
-      final data = decoded['data'];
-      if (data is Map<String, dynamic>) {
-        final items = data['items'] ?? data['courses'] ?? data['results'];
-        if (items is List) return items;
-      }
-    }
-    return null;
+  static Future<void> forceRefresh() async {
+    // No cache to refresh
   }
 
-  /// Get available subjects
-  static List<String> getAvailableSubjects() {
-    return [
-      'Mathematics',
-      'Science',
-      'Geography',
-      'Civic Education',
-      'Health & Physical Education',
-      'History',
-      'Buddhism',
-      'Hinduism',
-      'Islam',
-      'Christianity',
-      'Sinhala',
-      'English',
-      'Tamil',
-      'ICT',
-      'Aesthetic',
-    ];
+  static Future<bool> isCacheStale() async {
+    return false;
   }
 
-  static List<String> getAvailableGrades() {
-    return List.generate(13, (i) => (i + 1).toString().padLeft(2, '0')).toList();
+  static Future<void> refreshIfNeeded() async {
+    // No offline cache
   }
 
-  static List<String> getAvailableLanguages() {
-    return ['Sinhala', 'English', 'Tamil'];
+  static Future<void> downloadFullDataset() async {
+    // No download needed
   }
 
-  /// Format grade for display
-  static String formatGrade(String? grade) {
-    if (grade == null) return 'All Grades';
-    return 'Grade $grade';
+  static Future<void> downloadForOfflineUse() async {
+    // No offline use
   }
 
-  /// Format subject for display
-  static String formatSubject(String? subject) {
-    if (subject == null) return 'All Subjects';
-    return subject;
+  static Future<List<String>> getAvailableGrades() async {
+    final result = await fetchCourses();
+    final grades = result.items.map((c) => c.grade).where((g) => g != null && g.isNotEmpty).cast<String>().toSet().toList()..sort();
+    return grades;
+  }
+
+  static Future<List<String>> getAvailableLanguages() async {
+    final result = await fetchCourses();
+    final languages = result.items.map((c) => c.language).where((l) => l != null && l.isNotEmpty).cast<String>().toSet().toList()..sort();
+    return languages;
+  }
+
+  static Future<List<String>> getAvailableSubjects() async {
+    final result = await fetchCourses();
+    final subjects = result.items.map((c) => c.subject).where((s) => s != null && s.isNotEmpty).cast<String>().toSet().toList()..sort();
+    return subjects;
+  }
+
+  static Future<Map<String, int>> getStats() async {
+    final result = await fetchCourses();
+    return {'courses': result.items.length};
+  }
+
+  static void clearCache() {
+    // No cache
+  }
+
+  static Future<void> resetDatabase() async {
+    // No database
+  }
+
+  static String formatSubject(String subject) {
+    return subject.split('-').map((w) => w.isEmpty ? w : w[0].toUpperCase() + w.substring(1)).join(' ');
   }
 }

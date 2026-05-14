@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../models/course_model.dart';
 
 class CourseCard extends StatelessWidget {
@@ -40,25 +39,28 @@ class CourseCard extends StatelessWidget {
                         topRight: Radius.circular(16),
                       ),
                       child: course.thumbnailUrl != null && course.thumbnailUrl!.isNotEmpty
-                          ? CachedNetworkImage(
-                              imageUrl: course.thumbnailUrl!,
+                          ? Image.network(
+                              course.thumbnailUrl!,
                               width: double.infinity,
                               height: double.infinity,
                               fit: BoxFit.cover,
-                              placeholder: (context, url) => Container(
-                                color: primaryColor.withValues(alpha: 0.08),
-                                child: Center(
-                                  child: SizedBox(
-                                    width: 24,
-                                    height: 24,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
+                              loadingBuilder: (context, child, loadingProgress) {
+                                if (loadingProgress == null) return child;
+                                return Container(
+                                  color: primaryColor.withValues(alpha: 0.08),
+                                  child: Center(
+                                    child: SizedBox(
+                                      width: 24,
+                                      height: 24,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
+                                      ),
                                     ),
                                   ),
-                                ),
-                              ),
-                              errorWidget: (context, url, error) => _buildPlaceholder(primaryColor),
+                                );
+                              },
+                              errorBuilder: (context, error, stackTrace) => _buildPlaceholder(primaryColor),
                             )
                           : _buildPlaceholder(primaryColor),
                     ),

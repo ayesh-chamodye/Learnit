@@ -1,43 +1,68 @@
-import 'dart:convert';
 import 'dart:math';
-import 'package:http/http.dart' as http;
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import '../config/app_config.dart';
 import '../models/pdf_model.dart';
 import '../models/video_model.dart';
 import 'youtube_api_service.dart';
+import 'api_client.dart';
 
+/// Generic paginated result wrapper
+class PaginatedResult<T> {
+  final List<T> items;
+  final int currentPage;
+  final int totalPages;
+
+  PaginatedResult({
+    required this.items,
+    required this.currentPage,
+    required this.totalPages,
+  });
+}
+
+/// Service for fetching PDFs directly from API (no offline storage)
 class ApiService {
+  static final ApiClient _apiClient = ApiClient();
+
   // ==================== PDF Methods ====================
 
-  static Future<PaginatedResult<PdfItem>> fetchPdfsByCategory(String category, {int page = 1}) async {
+  /// Fetch PDFs by category directly from API with pagination
+  static Future<PaginatedResult<PdfItem>> fetchPdfsByCategory(
+    String category, {
+    int page = 1,
+    int pageSize = 20,
+    bool forceRefresh = false,
+  }) async {
     try {
       final uri = Uri.https(
         'v0-json-url-service.vercel.app',
         '/api/scrape/$category',
         {'page': page.toString()},
       );
-      final response = await http.get(
+
+      final response = await _apiClient.dio.getUri(
         uri,
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': 'LearnItApp/1.0 (Flutter)',
-          'Accept': 'application/json',
-        },
-      ).timeout(const Duration(seconds: 15));
+        options: Options(
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept-Encoding': 'gzip, deflate',
+          },
+        ),
+      );
 
       if (response.statusCode != 200) {
-        debugPrint('[$category] HTTP ${response.statusCode}: ${response.body.substring(0, min(500, response.body.length))}');
+        debugPrint('[$category] HTTP ${response.statusCode}');
         throw Exception('Failed to load $category: ${response.statusCode}');
       }
 
-      final dynamic decoded = jsonDecode(response.body);
-      debugPrint('[$category] Page $page - Raw: ${response.body.substring(0, min(500, response.body.length))}');
+      final dynamic decoded = response.data;
+      debugPrint('[$category] Page $page - Raw: ${decoded.toString().substring(0, min(500, decoded.toString().length))}');
 
       List<dynamic>? items = _extractItems(decoded);
       if (items == null || items.isEmpty) {
         debugPrint('[$category] No items found on page $page');
-        return PaginatedResult<PdfItem>(items: [], currentPage: page, totalPages: page);
+        return PaginatedResult<PdfItem>(items: [], currentPage: page, totalPages: 1);
       }
 
       final result = <PdfItem>[];
@@ -52,7 +77,7 @@ class ApiService {
               thumbnailUrl: item.thumbnailUrl,
               pdfUrl: item.pdfUrl,
               pageCount: item.pageCount,
-              category: formatCategoryName(category),
+              category: ApiService.formatCategoryName(category),
             ));
           } catch (e) {
             debugPrint('[$category] Parse error: $e');
@@ -60,60 +85,52 @@ class ApiService {
         }
       }
 
+      // Try to get total pages from API response
       int totalPages = 1;
       if (decoded is Map<String, dynamic>) {
         final data = decoded['data'];
         if (data is Map<String, dynamic>) {
           final pagination = data['pagination'];
           if (pagination is Map<String, dynamic>) {
-            totalPages = pagination['totalPages'] ?? 1;
+            totalPages = (pagination['totalPages'] ?? 1) as int;
+          }
+        }
+        // also check top-level pagination
+        if (decoded.containsKey('pagination')) {
+          final pagination = decoded['pagination'];
+          if (pagination is Map<String, dynamic>) {
+            totalPages = (pagination['totalPages'] ?? 1) as int;
           }
         }
       }
 
       debugPrint('[$category] Parsed ${result.length} items on page $page/$totalPages');
+
       return PaginatedResult<PdfItem>(
         items: result,
         currentPage: page,
         totalPages: totalPages,
       );
     } catch (e) {
-      throw Exception('Network error fetching $category page $page: $e');
+      debugPrint('[$category] API fetch error: $e');
+      rethrow;
     }
   }
 
-  static List<dynamic>? _extractItems(dynamic decoded) {
-    if (decoded is Map<String, dynamic>) {
-      final data = decoded['data'];
-      if (data is Map<String, dynamic>) {
-        final items = data['items'];
-        if (items is List) return items;
-      }
-    } else if (decoded is List) {
-      return decoded;
-    }
-    return _extractItemsRecursive(decoded);
+  static Future<void> forceRefreshCategory(String category) async {
+    // No cache to refresh
   }
 
-  static List<dynamic>? _extractItemsRecursive(dynamic value) {
-    if (value is Map<String, dynamic>) {
-      final pdfKeys = ['title', 'id', 'name', 'url', 'thumbnail', 'pdf', 'description'];
-      final hasKey = value.keys.any((k) => pdfKeys.any((pk) => k.toLowerCase().contains(pk)));
-      if (hasKey) return [value];
-      for (final v in value.values) {
-        final res = _extractItemsRecursive(v);
-        if (res != null && res.isNotEmpty) return res;
-      }
-      return null;
-    } else if (value is List) {
-      final all = <dynamic>[];
-      for (final item in value) {
-        final res = _extractItemsRecursive(item);
-        if (res != null) all.addAll(res);
-      }
-      return all.isNotEmpty ? all : null;
-    }
-    return null;
+  static Future<bool> isPdfCacheStale() async {
+    return false;
+  }
+
+  static Future<void> refreshPdfsIfNeeded() async {
+    // No offline cache
+  }
+
+  static Future<void> downloadAllForOfflineUse() async {
+    // No offline use
   }
 
   static String formatCategoryName(String category) {
@@ -132,18 +149,31 @@ class ApiService {
     return fetchPdfsByCategory('past-papers').then((r) => r.items);
   }
 
-  // ==================== Video Methods ====================
+  static Future<List<PdfItem>> searchPdfs(String query, {String? category}) async {
+    final result = await fetchPdfsByCategory(category ?? 'past-papers', page: 1, pageSize: 100);
+    final q = query.toLowerCase();
+    return result.items.where((pdf) =>
+        pdf.title.toLowerCase().contains(q) ||
+        (pdf.description?.toLowerCase() ?? '').contains(q)).toList();
+  }
 
-  // Fetch videos using YouTube Data API v3 with fallback to RSS
+  static void clearCache() {
+    // No cache
+  }
+
+  static Future<Map<String, int>> getStats() async {
+    return {};
+  }
+
+  // ==================== Video Feed Methods ====================
+
   static Future<PaginatedResult<VideoItem>> fetchVideos() async {
     try {
-      // If YouTube API is configured, use it
       if (AppConfig.useYouTubeApi) {
         final youtubeService = YouTubeApiService();
         final allVideos = <VideoItem>[];
         final seenIds = <String>{};
 
-        // Channel IDs for the two YouTube channels
         const channels = [
           {'id': 'UCnY7v189bwoSTFFYD_PNWhQ', 'name': 'Channel NIE'},
           {'id': 'UC9R2DswH8ZJ8r12lyvTLkDw', 'name': 'Ethaksalawa'},
@@ -176,9 +206,8 @@ class ApiService {
         }
       }
 
-      // Fallback to RSS fetching if API not configured or returned no results
       debugPrint('Falling back to RSS fetch');
-      final videos = await _fetchVideosFromRSSFallback();
+      final videos = await _fetchVideosFromRss();
       return PaginatedResult<VideoItem>(
         items: videos,
         currentPage: 1,
@@ -189,10 +218,8 @@ class ApiService {
     }
   }
 
-  // Fetch videos from YouTube RSS feed for a channel (fallback method)
-  static Future<List<VideoItem>> _fetchVideosFromRSSFallback() async {
+  static Future<List<VideoItem>> _fetchVideosFromRss() async {
     try {
-      // Channel IDs for the two YouTube channels
       const channels = [
         {'id': 'UCnY7v189bwoSTFFYD_PNWhQ', 'name': 'Channel NIE'},
         {'id': 'UC9R2DswH8ZJ8r12lyvTLkDw', 'name': 'Ethaksalawa'},
@@ -223,8 +250,7 @@ class ApiService {
 
           final body = response.body;
           debugPrint('[RSS ${channel['id']}] Response length: ${body.length}');
-          
-          // Check if response contains valid feed
+
           if (!body.contains('<feed') && !body.contains('<entry')) {
             debugPrint('[RSS ${channel['id']}] Invalid feed or empty response');
             continue;
@@ -234,13 +260,12 @@ class ApiService {
           final entries = entryRegex.allMatches(body);
           debugPrint('[RSS ${channel['id']}] Found ${entries.length} entries');
 
-          const maxVideos = 15; // Limit per channel
+          const maxVideos = 15;
           int addedCount = 0;
           for (final entryMatch in entries) {
             if (allVideos.length >= maxVideos * channels.length) break;
             final entry = entryMatch.group(1) ?? '';
             try {
-              // Use flexible regex that allows attributes in tags
               final idMatch = RegExp(r'<yt:videoId[^>]*>([^<]+)</yt:videoId>').firstMatch(entry);
               final titleMatch = RegExp(r'<title[^>]*>([^<]+)</title>').firstMatch(entry);
               final thumbMatch = RegExp(r'<media:thumbnail[^>]*url="([^"]+)"').firstMatch(entry);
@@ -248,7 +273,6 @@ class ApiService {
               if (idMatch != null && titleMatch != null) {
                 final videoId = idMatch.group(1)!;
                 var title = titleMatch.group(1)!;
-                // Clean up CDATA sections if present
                 if (title.startsWith('<![CDATA[') && title.endsWith(']]>')) {
                   title = title.substring(9, title.length - 3);
                 }
@@ -270,27 +294,54 @@ class ApiService {
             } catch (e) {
               debugPrint('[RSS ${channel['id']}] Entry parse error: $e');
             }
-           }
+          }
 
-           debugPrint('[RSS ${channel['id']}] Added $addedCount videos');
-         } catch (e) {
-           debugPrint('Error fetching channel ${channel['id']}: $e');
-         }
-       }
+          debugPrint('[RSS ${channel['id']}] Added $addedCount videos');
+        } catch (e) {
+          debugPrint('Error fetching channel ${channel['id']}: $e');
+        }
+      }
 
       debugPrint('Fetched ${allVideos.length} videos via RSS fallback');
       return allVideos;
     } catch (e) {
       debugPrint('RSS fetch error: $e');
-      return [];
+      return const [];
     }
   }
-}
 
-class PaginatedResult<T> {
-  final List<T> items;
-  final int currentPage;
-  final int totalPages;
+  // Helper method to extract items from API response
+  static List<dynamic>? _extractItems(dynamic decoded) {
+    if (decoded is Map<String, dynamic>) {
+      final data = decoded['data'];
+      if (data is Map<String, dynamic>) {
+        final items = data['items'] ?? data['pdfs'] ?? data['papers'];
+        if (items is List) return items;
+      }
+    } else if (decoded is List) {
+      return decoded;
+    }
+    return _extractItemsRecursive(decoded);
+  }
 
-  PaginatedResult({required this.items, required this.currentPage, required this.totalPages});
+  static List<dynamic>? _extractItemsRecursive(dynamic value) {
+    if (value is Map<String, dynamic>) {
+      final pdfKeys = ['title', 'id', 'name', 'url', 'thumbnail', 'pdf', 'description'];
+      final hasKey = value.keys.any((k) => pdfKeys.any((pk) => k.toLowerCase().contains(pk)));
+      if (hasKey) return [value];
+      for (final v in value.values) {
+        final res = _extractItemsRecursive(v);
+        if (res != null && res.isNotEmpty) return res;
+      }
+      return null;
+    } else if (value is List) {
+      final all = <dynamic>[];
+      for (final item in value) {
+        final res = _extractItemsRecursive(item);
+        if (res != null) all.addAll(res);
+      }
+      return all.isNotEmpty ? all : null;
+    }
+    return null;
+  }
 }

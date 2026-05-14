@@ -1,8 +1,8 @@
-import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
+import 'package:dio/dio.dart';
 import '../config/app_config.dart';
 import '../models/video_model.dart';
+import 'api_client.dart';
 
 /// Service for interacting with YouTube Data API v3
 /// Documentation: https://developers.google.com/youtube/v3/docs
@@ -49,16 +49,22 @@ class YouTubeApiService {
         },
       );
 
-      final response = await http
-          .get(uri, headers: {'Accept': 'application/json'})
-          .timeout(const Duration(seconds: 15));
+      final response = await ApiClient().dio.getUri(
+        uri,
+        options: Options(
+          headers: {
+            'Accept': 'application/json',
+            'Accept-Encoding': 'gzip, deflate',
+          },
+        ),
+      );
 
       if (response.statusCode != 200) {
-        debugPrint('YouTube API search error: HTTP ${response.statusCode} - ${response.body}');
+        debugPrint('YouTube API search error: HTTP ${response.statusCode} - ${response.data}');
         return [];
       }
 
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final data = response.data as Map<String, dynamic>;
       final items = data['items'] as List<dynamic>?;
 
       if (items == null || items.isEmpty) {
@@ -94,16 +100,22 @@ class YouTubeApiService {
         },
       );
 
-      final response = await http
-          .get(uri, headers: {'Accept': 'application/json'})
-          .timeout(const Duration(seconds: 15));
+      final response = await ApiClient().dio.getUri(
+        uri,
+        options: Options(
+          headers: {
+            'Accept': 'application/json',
+            'Accept-Encoding': 'gzip, deflate',
+          },
+        ),
+      );
 
       if (response.statusCode != 200) {
         debugPrint('YouTube API getVideosByIds error: HTTP ${response.statusCode}');
         return [];
       }
 
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final data = response.data as Map<String, dynamic>;
       final items = data['items'] as List<dynamic>?;
 
       if (items == null || items.isEmpty) {
@@ -155,16 +167,22 @@ class YouTubeApiService {
         },
       );
 
-      final response = await http
-          .get(uri, headers: {'Accept': 'application/json'})
-          .timeout(const Duration(seconds: 15));
+      final response = await ApiClient().dio.getUri(
+        uri,
+        options: Options(
+          headers: {
+            'Accept': 'application/json',
+            'Accept-Encoding': 'gzip, deflate',
+          },
+        ),
+      );
 
       if (response.statusCode != 200) {
         debugPrint('YouTube API playlist error: HTTP ${response.statusCode}');
         return [];
       }
 
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final data = response.data as Map<String, dynamic>;
       final items = data['items'] as List<dynamic>?;
 
       if (items == null || items.isEmpty) {
@@ -191,16 +209,22 @@ class YouTubeApiService {
         },
       );
 
-      final response = await http
-          .get(uri, headers: {'Accept': 'application/json'})
-          .timeout(const Duration(seconds: 15));
+      final response = await ApiClient().dio.getUri(
+        uri,
+        options: Options(
+          headers: {
+            'Accept': 'application/json',
+            'Accept-Encoding': 'gzip, deflate',
+          },
+        ),
+      );
 
       if (response.statusCode != 200) {
         debugPrint('YouTube API channel error: HTTP ${response.statusCode}');
         return null;
       }
 
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final data = response.data as Map<String, dynamic>;
       final items = data['items'] as List<dynamic>?;
 
       if (items == null || items.isEmpty) {
@@ -249,7 +273,6 @@ class YouTubeApiService {
     try {
       final snippet = item['snippet'] as Map<String, dynamic>?;
       final contentDetails = item['contentDetails'] as Map<String, dynamic>?;
-      final statistics = item['statistics'] as Map<String, dynamic>?;
 
       if (snippet == null) return null;
 

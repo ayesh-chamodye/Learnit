@@ -79,11 +79,7 @@ class _ModernHomeScreenState extends State<ModernHomeScreen> {
         elevation: 0,
         actions: [
           if (_currentIndex == 0) ...[
-            IconButton(
-              icon: const Icon(Icons.search),
-              onPressed: () {},
-            ),
-            IconButton(
+                        IconButton(
               icon: const Icon(Icons.notifications_outlined),
               onPressed: () {},
             ),
@@ -107,13 +103,13 @@ class _ModernHomeScreenState extends State<ModernHomeScreen> {
         unselectedFontSize: 11,
         items: const [
           BottomNavigationBarItem(
-            icon: Icon(Icons.home_outlined),
-            activeIcon: Icon(Icons.home),
+            icon: Icon(Icons.book_outlined),
+            activeIcon: Icon(Icons.book),
             label: 'Resources',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.book_outlined),
-            activeIcon: Icon(Icons.book),
+            icon: Icon(Icons.video_library_outlined),
+            activeIcon: Icon(Icons.video_library),
             label: 'Courses',
           ),
           BottomNavigationBarItem(

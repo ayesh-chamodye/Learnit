@@ -14,7 +14,6 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   late Animation<double> _dot1Anim;
   late Animation<double> _dot2Anim;
   late Animation<double> _dot3Anim;
-  Timer? _navTimer;
 
   @override
   void initState() {
@@ -55,18 +54,20 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     
     _dotController.repeat();
 
-    // Navigate to home after 5 seconds (longer display)
-    _navTimer = Timer(const Duration(milliseconds: 5000), () {
-      if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/home');
-      }
-    });
+    // Navigate after splash duration
+    _navigateToHome();
+  }
+
+  Future<void> _navigateToHome() async {
+    await Future.delayed(const Duration(milliseconds: 2000));
+    if (mounted) {
+      Navigator.of(context).pushReplacementNamed('/home');
+    }
   }
 
   @override
   void dispose() {
     _dotController.dispose();
-    _navTimer?.cancel();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
@@ -135,7 +136,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
             ),
             const SizedBox(height: 24),
             // Brand text
-            Text(
+            const Text(
               'LearnIt',
               style: TextStyle(
                 fontSize: 24,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:file_picker/file_picker.dart';
+import 'dart:io';
 import '../main.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -11,10 +12,9 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  String _downloadPath = '';
   bool _isDarkMode = false;
-  bool _autoDownload = false;
   bool _notificationsEnabled = true;
+  String? _downloadPath;
 
   @override
   void initState() {
@@ -25,26 +25,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      _downloadPath = prefs.getString('download_path') ?? '';
       _isDarkMode = prefs.getBool('dark_mode') ?? false;
-      _autoDownload = prefs.getBool('auto_download') ?? false;
       _notificationsEnabled = prefs.getBool('notifications') ?? true;
+      _downloadPath = prefs.getString('download_path');
     });
     _applyTheme(_isDarkMode);
   }
 
   Future<void> _saveSettings() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('download_path', _downloadPath);
     await prefs.setBool('dark_mode', _isDarkMode);
-    await prefs.setBool('auto_download', _autoDownload);
     await prefs.setBool('notifications', _notificationsEnabled);
+    if (_downloadPath != null) {
+      await prefs.setString('download_path', _downloadPath!);
+    }
   }
 
-  Future<void> _selectDownloadPath() async {
+  void _applyTheme(bool isDark) {
+    MyApp.of(context)?.setTheme(isDark);
+  }
+
+  Future<void> _pickDownloadFolder() async {
     try {
+      // Use directory picker
       String? selectedDirectory = await FilePicker.platform.getDirectoryPath(
         dialogTitle: 'Select Download Folder',
+        initialDirectory: _downloadPath,
       );
 
       if (selectedDirectory != null) {
@@ -55,7 +61,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Download path set to: $selectedDirectory'),
+              content: Text('Download folder set to: $selectedDirectory'),
               backgroundColor: Colors.green,
             ),
           );
@@ -65,16 +71,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error selecting folder: $e'),
+            content: Text('Failed to set folder: $e'),
             backgroundColor: Colors.red,
           ),
         );
       }
     }
-  }
-
-  void _applyTheme(bool isDark) {
-    MyApp.of(context)?.setTheme(isDark);
   }
 
   @override
@@ -93,31 +95,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _buildSectionHeader('Downloads', onSurface),
-          _buildSettingCard(
-            icon: Icons.folder,
-            title: 'Download Path',
-            subtitle: _downloadPath.isEmpty ? 'Not set (default Downloads)' : _downloadPath,
-            onTap: _selectDownloadPath,
-            onSurface: onSurface,
-            primaryColor: theme.colorScheme.primary,
-          ),
-          const SizedBox(height: 8),
-          _buildSwitchSetting(
-            icon: Icons.download,
-            title: 'Auto Download',
-            subtitle: 'Automatically download PDFs for offline access',
-            value: _autoDownload,
-            onChanged: (value) {
-              setState(() {
-                _autoDownload = value;
-              });
-              _saveSettings();
-            },
-            onSurface: onSurface,
-            primaryColor: theme.colorScheme.primary,
-          ),
-          const SizedBox(height: 24),
           _buildSectionHeader('Appearance', onSurface),
           _buildSwitchSetting(
             icon: Icons.dark_mode,
@@ -138,8 +115,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _buildSectionHeader('Notifications', onSurface),
           _buildSwitchSetting(
             icon: Icons.notifications,
-            title: 'Enable Notifications',
-            subtitle: 'Get notified about new content',
+            title: 'Notifications',
+            subtitle: 'Enable push notifications',
             value: _notificationsEnabled,
             onChanged: (value) {
               setState(() {
@@ -147,6 +124,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
               });
               _saveSettings();
             },
+            onSurface: onSurface,
+            primaryColor: theme.colorScheme.primary,
+          ),
+          const SizedBox(height: 24),
+          _buildSectionHeader('Downloads', onSurface),
+          _buildSettingCard(
+            icon: Icons.folder,
+            title: 'Download Location',
+            subtitle: _downloadPath != null
+                ? _shortenPath(_downloadPath!)
+                : 'Default (Downloads folder)',
+            onTap: _pickDownloadFolder,
             onSurface: onSurface,
             primaryColor: theme.colorScheme.primary,
           ),
@@ -174,46 +163,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onSurface: onSurface,
             primaryColor: theme.colorScheme.primary,
           ),
-          const SizedBox(height: 32),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: ElevatedButton.icon(
-              onPressed: () async {
-                final dialogContext = context;
-                final scaffoldContext = context;
-                final confirmed = await showDialog<bool>(
-                  context: dialogContext,
-                  builder: (context) => AlertDialog(
-                    title: const Text('Clear Cache'),
-                    content: const Text('This will clear all cached PDF thumbnails. Continue?'),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context, false),
-                        child: const Text('Cancel'),
-                      ),
-                      TextButton(
-                        onPressed: () => Navigator.pop(context, true),
-                        child: const Text('Clear'),
-                      ),
-                    ],
-                  ),
-                );
-                if (confirmed != true) return;
-                if (!mounted) return;
-                ScaffoldMessenger.of(scaffoldContext).showSnackBar(
-                  const SnackBar(content: Text('Cache cleared')),
-                );
-              },
-              icon: const Icon(Icons.cleaning_services),
-              label: const Text('Clear Cache'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
         ],
       ),
     );
@@ -232,6 +181,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
     );
+  }
+
+  String _shortenPath(String path) {
+    // Show last 2-3 folder names to keep it readable
+    final parts = path.split(Platform.pathSeparator);
+    if (parts.length <= 2) return path;
+    return '.../${parts[parts.length - 2]}/${parts[parts.length - 1]}';
   }
 
   Widget _buildSettingCard({
