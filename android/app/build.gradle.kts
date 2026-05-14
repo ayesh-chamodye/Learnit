@@ -5,6 +5,9 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+import java.util.Properties
+import java.io.FileInputStream
+
 android {
     namespace = "com.ayesh.dev.learnit"
     compileSdk = flutter.compileSdkVersion
@@ -30,11 +33,37 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        create("release") {
+            val keystorePropertiesFile = rootProject.file("key.properties")
+            if (keystorePropertiesFile.exists()) {
+                val keystoreProperties = Properties()
+                keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+                storeFile = file(keystoreProperties["storeFile"] as String)
+                storePassword = keystoreProperties["storePassword"] as String
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["keyPassword"] as String
+            } else {
+                // Fallback to debug signing if key.properties not found
+                storeFile = file(System.getenv("KEYSTORE_PATH") ?: "debug.keystore")
+                storePassword = System.getenv("KEYSTORE_PASSWORD") ?: "android"
+                keyAlias = System.getenv("KEY_ALIAS") ?: "androiddebugkey"
+                keyPassword = System.getenv("KEY_PASSWORD") ?: "android"
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // Configure signing for release builds
+            signingConfig = signingConfigs.getByName("release")
+            // Disable code shrinking to avoid configuration issues
+            isMinifyEnabled = false
+            // Disable resource shrinking
+            isShrinkResources = false
+            // Add ProGuard rules if needed
+            // proguardFiles.add(proguardFiles.getDefaultProguardFile("proguard-android.txt"))
+            // proguardFiles.add(file("proguard-rules.pro"))
         }
     }
 }

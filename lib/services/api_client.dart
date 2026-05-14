@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 
 /// Singleton API client with connection pooling and caching
 class ApiClient {
-  static const int _defaultTimeoutSeconds = 10;
+  static const int _defaultTimeoutSeconds = 30;
   static final ApiClient _instance = ApiClient._internal();
   factory ApiClient() => _instance;
 
