@@ -28,8 +28,7 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         ndk {
-            // Use SYMBOL_TABLE to keep minimal debug symbols and avoid strip errors
-            debugSymbolLevel = "SYMBOL_TABLE"
+            abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86_64'
         }
     }
 
