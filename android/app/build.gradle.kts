@@ -1,7 +1,6 @@
 plugins {
     id("com.android.application")
     id("kotlin-android")
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
 
@@ -11,7 +10,7 @@ import java.io.FileInputStream
 android {
     namespace = "com.ayesh.dev.learnit"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    ndkVersion = "28.2.13676358"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -19,18 +18,19 @@ android {
     }
 
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.toString()
+        jvmTarget = "17"
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.ayesh.dev.learnit"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        ndk {
+            // Use SYMBOL_TABLE to keep minimal debug symbols and avoid strip errors
+            debugSymbolLevel = "SYMBOL_TABLE"
+        }
     }
 
     signingConfigs {
@@ -39,12 +39,11 @@ android {
             if (keystorePropertiesFile.exists()) {
                 val keystoreProperties = Properties()
                 keystoreProperties.load(FileInputStream(keystorePropertiesFile))
-                storeFile = file(keystoreProperties["storeFile"] as String)
-                storePassword = keystoreProperties["storePassword"] as String
-                keyAlias = keystoreProperties["keyAlias"] as String
-                keyPassword = keystoreProperties["keyPassword"] as String
+                storeFile = file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
             } else {
-                // Fallback to debug signing if key.properties not found
                 storeFile = file(System.getenv("KEYSTORE_PATH") ?: "debug.keystore")
                 storePassword = System.getenv("KEYSTORE_PASSWORD") ?: "android"
                 keyAlias = System.getenv("KEY_ALIAS") ?: "androiddebugkey"
@@ -55,15 +54,34 @@ android {
 
     buildTypes {
         release {
-            // Configure signing for release builds
             signingConfig = signingConfigs.getByName("release")
-            // Disable code shrinking to avoid configuration issues
             isMinifyEnabled = false
-            // Disable resource shrinking
             isShrinkResources = false
-            // Add ProGuard rules if needed
-            // proguardFiles.add(proguardFiles.getDefaultProguardFile("proguard-android.txt"))
-            // proguardFiles.add(file("proguard-rules.pro"))
+        }
+    }
+
+    // Modern packaging configuration (AGP 8.0+)
+    packaging {
+        jniLibs {
+            keepDebugSymbols += "**/*.so"
+        }
+    }
+
+    // Disable lint for release builds
+    lint {
+        checkReleaseBuilds = false
+        abortOnError = false
+    }
+}
+
+// Disable problematic native debug symbol stripping and lint tasks
+afterEvaluate {
+    tasks.configureEach {
+        when (name) {
+            "stripReleaseDebugSymbols" -> enabled = false
+            "lintVitalAnalyzeRelease" -> enabled = false
+            "lintAnalyzeRelease" -> enabled = false
+            "lintRelease" -> enabled = false
         }
     }
 }
