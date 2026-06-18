@@ -137,7 +137,7 @@ class _CourseCategoryScreenState extends State<CourseCategoryScreen> {
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
       appBar: AppBar(
-        title: Text('Grade ${int.parse(widget.grade)} - $_selectedLanguage'),
+        title: Text('Grade ${widget.grade} - $_selectedLanguage'),
         backgroundColor: theme.colorScheme.primary,
         foregroundColor: theme.colorScheme.onPrimary,
         elevation: 0,

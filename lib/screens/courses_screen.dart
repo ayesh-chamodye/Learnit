@@ -668,8 +668,8 @@ class _CourseListItem extends StatelessWidget {
                     color: theme.colorScheme.primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(4),
                   ),
-                   child: Text(
-                     'Gr ${int.parse(course.grade!)}',
+child: Text(
+                      'Gr ${course.grade!}',
                      style: TextStyle(
                        fontSize: 10,
                        color: theme.colorScheme.primary,

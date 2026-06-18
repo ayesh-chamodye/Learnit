@@ -151,8 +151,8 @@ class CourseCard extends StatelessWidget {
                       children: [
                         Icon(Icons.school_outlined, size: 10, color: onSurface.withValues(alpha: 0.5)),
                         const SizedBox(width: 2),
-                         Text(
-                           'Grade ${int.parse(course.grade ?? grade)}',
+Text(
+                            'Grade ${course.grade ?? grade}',
                            style: TextStyle(fontSize: 10, color: onSurface.withValues(alpha: 0.6)),
                          ),
                       ],

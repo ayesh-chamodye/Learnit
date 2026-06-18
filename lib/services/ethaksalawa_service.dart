@@ -33,7 +33,7 @@ class EthaksalawaService {
       final queryParams = <String, String>{
         'page': page.toString(),
       };
-      if (grade != null && grade.isNotEmpty) queryParams['grade'] = int.parse(grade).toString();
+      if (grade != null && grade.isNotEmpty) queryParams['grade'] = grade;
       if (language != null && language.isNotEmpty) queryParams['language'] = language;
       if (subject != null && subject.isNotEmpty) queryParams['subject'] = subject;
       if (searchQuery != null && searchQuery.isNotEmpty) queryParams['search'] = searchQuery;
@@ -153,7 +153,6 @@ class EthaksalawaService {
         .map((c) => c.grade)
         .where((g) => g != null && g.isNotEmpty)
         .cast<String>()
-        .map((g) => int.parse(g).toString())
         .toSet()
         .toList()
       ..sort();
