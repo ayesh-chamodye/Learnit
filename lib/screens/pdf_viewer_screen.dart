@@ -2,9 +2,7 @@ import 'dart:io';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
-import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/progress_service.dart';
@@ -103,12 +101,6 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     });
 
     try {
-      if (Platform.isAndroid) {
-        final status = await Permission.storage.request();
-        if (!status.isGranted) {
-          throw Exception('Storage permission denied');
-        }
-      }
 
       // Use configured ApiClient for consistent settings
       final dio = ApiClient().dio;
@@ -121,12 +113,8 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
         dirPath = savedPath;
       } else {
         if (Platform.isAndroid) {
-          final directory = await getExternalStorageDirectory();
-          dirPath = directory?.path ?? (await getApplicationDocumentsDirectory()).path;
-          final downloadsDir = Directory('/storage/emulated/0/Download');
-          if (await downloadsDir.exists()) {
-            dirPath = downloadsDir.path;
-          }
+          final directory = await getApplicationDocumentsDirectory();
+          dirPath = directory.path;
         } else {
           dirPath = (await getApplicationDocumentsDirectory()).path;
         }

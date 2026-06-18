@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -10,29 +11,31 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
+  AppOpenAd? _appOpenAd;
+  bool _hasNavigationStarted = false;
+
   late AnimationController _dotController;
   late Animation<double> _dot1Anim;
   late Animation<double> _dot2Anim;
   late Animation<double> _dot3Anim;
 
+  static const String _appOpenAdUnitId = 'ca-app-pub-8287945486916442/8915457248';
+
   @override
   void initState() {
     super.initState();
-    
-    // Set fullscreen immersive mode
+
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
       DeviceOrientation.portraitDown,
     ]);
 
-    // Setup dot bounce animation
     _dotController = AnimationController(
       duration: const Duration(milliseconds: 1200),
       vsync: this,
     );
-    
-    // Create three staggered animations for bouncing effect
+
     _dot1Anim = Tween<double>(begin: 0.5, end: 1.0).animate(
       CurvedAnimation(
         parent: _dotController,
@@ -51,15 +54,38 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
         curve: const Interval(0.66, 1.0, curve: Curves.easeInOut),
       ),
     );
-    
+
     _dotController.repeat();
 
-    // Navigate after splash duration
-    _navigateToHome();
+    _loadAppOpenAd();
+    Future.delayed(const Duration(seconds: 5), _tryShowAdAndNavigate);
   }
 
-  Future<void> _navigateToHome() async {
-    await Future.delayed(const Duration(milliseconds: 2000));
+  Future<void> _tryShowAdAndNavigate() async {
+    if (_hasNavigationStarted) return;
+    _hasNavigationStarted = true;
+
+    final ad = _appOpenAd;
+    if (ad != null) {
+      _appOpenAd = null;
+      ad.fullScreenContentCallback = FullScreenContentCallback(
+        onAdDismissedFullScreenContent: (dismissedAd) {
+          dismissedAd.dispose();
+          _goToHome();
+        },
+        onAdFailedToShowFullScreenContent: (failedAd, error) {
+          failedAd.dispose();
+          debugPrint('App open ad failed to show: $error');
+          _goToHome();
+        },
+      );
+      await ad.show();
+    } else {
+      _goToHome();
+    }
+  }
+
+  void _goToHome() {
     if (mounted) {
       Navigator.of(context).pushReplacementNamed('/home');
     }
@@ -68,12 +94,37 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   @override
   void dispose() {
     _dotController.dispose();
+    _appOpenAd?.dispose();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
       DeviceOrientation.portraitDown,
     ]);
     super.dispose();
+  }
+
+  void _loadAppOpenAd() {
+    AppOpenAd.load(
+      adUnitId: _appOpenAdUnitId,
+      request: const AdRequest(),
+      adLoadCallback: AppOpenAdLoadCallback(
+        onAdLoaded: (ad) {
+          if (_hasNavigationStarted) {
+            ad.dispose();
+            return;
+          }
+          setState(() {
+            _appOpenAd = ad;
+          });
+          _tryShowAdAndNavigate();
+        },
+        onAdFailedToLoad: (error) {
+          debugPrint('App open ad failed to load: $error');
+          setState(() {});
+          _tryShowAdAndNavigate();
+        },
+      ),
+    );
   }
 
   @override
@@ -87,7 +138,6 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // App Logo Image
             Image.asset(
               'assets/icon.png',
               width: 200,
@@ -101,7 +151,6 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
               },
             ),
             const SizedBox(height: 60),
-            // Bouncing loading dots
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -135,7 +184,6 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
               ],
             ),
             const SizedBox(height: 24),
-            // Brand text
             const Text(
               'LearnIt',
               style: TextStyle(
